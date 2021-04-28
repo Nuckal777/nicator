@@ -1,6 +1,10 @@
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::{net::Shutdown, path::Path};
+use std::time::{Duration, Instant};
+
+const POLL_TIMEOUT: i32 = 200;
 
 use crate::{
     get_store_path,
@@ -11,6 +15,8 @@ use crate::{
 struct Daemon {
     listener: UnixListener,
     passphrase: Option<String>,
+    // in seconds
+    timeout: Duration,
 }
 
 impl Daemon {
@@ -18,16 +24,25 @@ impl Daemon {
         Ok(Self {
             listener: UnixListener::bind(crate::SOCKET_PATH)?,
             passphrase: None,
+            // default to 1 sec so the daemon shutsdown if unlocking fails
+            timeout: Duration::from_secs(10),
         })
     }
 
-    fn listen(&mut self) -> Result<bool, crate::Error> {
+    fn poll(&mut self) -> Result<bool, crate::Error> {
+        let poll_fd =
+            nix::poll::PollFd::new(self.listener.as_raw_fd(), nix::poll::PollFlags::POLLIN);
+        let poll_count = nix::poll::poll(&mut [poll_fd], POLL_TIMEOUT)?;
+        Ok(poll_count == 1)
+    }
+
+    fn accept(&mut self) -> Result<bool, crate::Error> {
         let mut should_exit = false;
         let (mut conn, _) = self.listener.accept()?;
         let request = parse(&mut conn)?;
         match request {
             Packet::Lock => should_exit = true,
-            Packet::Unlock { passphrase } => self.handle_unlock(&mut conn, passphrase)?,
+            Packet::Unlock { passphrase, timeout } => self.handle_unlock(&mut conn, passphrase, timeout)?,
             Packet::Store { credential } => self.handle_store(&mut conn, credential)?,
             Packet::Get { credential } => self.handle_get(&mut conn, &credential)?,
             Packet::Erase { credential } => self.handle_erase(&mut conn, &credential)?,
@@ -49,12 +64,14 @@ impl Daemon {
         &mut self,
         conn: &mut UnixStream,
         passphrase: String,
+        timeout: u64,
     ) -> Result<(), crate::Error> {
         // try to unlock
         let store = store::Store::decrypt_from(&get_store_path(), &passphrase);
         match store {
             Ok(_) => {
                 self.passphrase = Some(passphrase);
+                self.timeout = Duration::from_secs(timeout);
                 let response = Packet::Result {
                     message: "".to_string(),
                     success: true,
@@ -196,9 +213,17 @@ pub fn launch() -> Result<(), crate::Error> {
     let mut daemon = Daemon::new()?;
     let perm = std::fs::Permissions::from_mode(0o600);
     std::fs::set_permissions(crate::SOCKET_PATH, perm)?;
+    let start_time = Instant::now();
     loop {
-        let exit = daemon.listen()?;
-        if exit {
+        if daemon.poll()? {
+            let exit = daemon.accept()?;
+            if exit {
+                break;
+            }
+        }
+        let current_time = Instant::now();
+        let duration = current_time - start_time;
+        if duration > daemon.timeout {
             break;
         }
     }

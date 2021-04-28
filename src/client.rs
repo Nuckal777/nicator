@@ -13,8 +13,14 @@ impl Client {
         })
     }
 
-    pub fn unlock(&mut self, passphrase: String) -> Result<(), crate::Error> {
-        crate::packet::write(&mut self.stream, &Packet::Unlock { passphrase })?;
+    pub fn unlock(&mut self, passphrase: String, timeout: u64) -> Result<(), crate::Error> {
+        crate::packet::write(
+            &mut self.stream,
+            &Packet::Unlock {
+                passphrase,
+                timeout,
+            },
+        )?;
         let response = crate::packet::parse(&mut self.stream)?;
         if let Packet::Result { message, success } = response {
             if !success {

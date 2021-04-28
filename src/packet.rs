@@ -8,6 +8,7 @@ pub enum Packet {
     Lock,
     Unlock {
         passphrase: String,
+        timeout: u64,
     },
     Result {
         success: bool,
