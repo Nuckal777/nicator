@@ -41,7 +41,7 @@ impl Credential {
             let splitted: Vec<&str> = line.split('=').collect();
             let key = splitted[0];
             let value_parts: Vec<&str> = splitted.iter().skip(1).copied().collect();
-            let value = value_parts.concat();
+            let value = value_parts.join("=");
             match key {
                 "protocol" => credential.protocol = value,
                 "host" => credential.host = value,
@@ -57,7 +57,7 @@ impl Credential {
 
 #[derive(Deserialize, Serialize)]
 pub struct Store {
-    pub credentials: Vec<Credential>,
+    credentials: Vec<Credential>,
 }
 
 impl Default for Store {
@@ -157,6 +157,25 @@ impl Store {
         Ok(())
     }
 
+    /// Updates a credential.
+    /// If the credential does not already exist for the given protocol, host, path combination it will be added.
+    pub fn update(&mut self, new_cred: Credential) {
+        let result = self.credentials.iter_mut().find(|cred| {
+            cred.protocol == new_cred.protocol
+                && cred.host == new_cred.host
+                && cred.path == new_cred.path
+        });
+        match result {
+            Some(cred) => {
+                cred.username = new_cred.username;
+                cred.password = new_cred.password;
+            }
+            None => {
+                self.credentials.push(new_cred);
+            }
+        }
+    }
+
     /// Finds a credential in the store matching the desribed repo.
     /// Equality for protocol, host and path is checked firstly.
     /// Afterwards protocol and host equality matters.
@@ -196,7 +215,7 @@ mod tests {
                 super::Credential {
                     host: "host2".to_string(),
                     password: "pw2".to_string(),
-                    path: "path2".to_string(),
+                    path: "".to_string(),
                     protocol: "protocol2".to_string(),
                     username: "user2".to_string(),
                 },
@@ -205,7 +224,18 @@ mod tests {
     }
 
     #[test]
-    fn store_decrypt() {
+    fn credential_from_git() {
+        let git_str = "username=abc\npassword=e=r\nhost=github.com\nprotocol=https\npath=dfg";
+        let credential = super::Credential::from_git(git_str);
+        assert_eq!(credential.host, "github.com");
+        assert_eq!(credential.password, "e=r");
+        assert_eq!(credential.path, "dfg");
+        assert_eq!(credential.protocol, "https");
+        assert_eq!(credential.username, "abc");
+    }
+
+    #[test]
+    fn encrypt_decrypt() {
         let store = setup_store();
         let mut encrpyted = Vec::<u8>::new();
         store
@@ -221,6 +251,46 @@ mod tests {
     fn erase() {
         let mut store = setup_store();
         store.erase("protocol1", "host1", "path1");
+        store.erase("bla", "blup", "blop");
         assert_eq!(store.credentials.len(), 1);
+    }
+
+    #[test]
+    fn update() {
+        let mut store = setup_store();
+        store.update(super::Credential {
+            host: "host1".to_string(),
+            password: "topsecret".to_string(),
+            path: "path1".to_string(),
+            protocol: "protocol1".to_string(),
+            username: "user1".to_string(),
+        });
+        store.update(super::Credential {
+            host: "host3".to_string(),
+            password: "pw3".to_string(),
+            path: "path3".to_string(),
+            protocol: "protocol3".to_string(),
+            username: "user3".to_string(),
+        });
+        assert_eq!(store.credentials.len(), 3);
+        assert_eq!(store.credentials[0].password, "topsecret");
+    }
+
+    #[test]
+    fn find() {
+        let store = setup_store();
+        let found = store.find("protocol1", "host1", "path1");
+        let not_found = store.find("protocol1", "host1", "another_path");
+        assert!(found.is_some());
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn find_no_path() {
+        let store = setup_store();
+        let found = store.find("protocol2", "host2", "");
+        let not_found = store.find("protocol1", "host1", "");
+        assert!(found.is_some());
+        assert!(not_found.is_none());
     }
 }

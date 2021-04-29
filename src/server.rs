@@ -25,7 +25,7 @@ impl Daemon {
             listener: UnixListener::bind(crate::SOCKET_PATH)?,
             passphrase: None,
             // default to 1 sec so the daemon shutsdown if unlocking fails
-            timeout: Duration::from_secs(10),
+            timeout: Duration::from_secs(1),
         })
     }
 
@@ -120,7 +120,7 @@ impl Daemon {
 
     fn store(credential: Credential, passphrase: &str) -> Result<(), crate::Error> {
         let mut store = store::Store::decrypt_from(&get_store_path(), passphrase)?;
-        store.credentials.push(credential);
+        store.update(credential);
         store.encrypt_at(&get_store_path(), passphrase)?;
         Ok(())
     }
