@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, path::PathBuf};
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde_derive::{Deserialize, Serialize};
@@ -8,6 +8,7 @@ pub enum Packet {
     Lock,
     Unlock {
         passphrase: String,
+        store_path: PathBuf,
         timeout: u64,
     },
     Result {
@@ -46,22 +47,30 @@ pub fn write<W: std::io::Write>(writer: &mut W, packet: &Packet) -> Result<(), c
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{io::Cursor, path::PathBuf};
 
     #[test]
     fn write_parse() -> Result<(), crate::Error> {
         let mut data = Vec::<u8>::new();
-        super::write(&mut Cursor::new(&mut data), &super::Packet::Unlock{
-            passphrase: "pass".to_string(),
-            timeout: 678,
-        })?;
+        super::write(
+            &mut Cursor::new(&mut data),
+            &super::Packet::Unlock {
+                passphrase: "pass".to_string(),
+                timeout: 678,
+                store_path: PathBuf::new(),
+            },
+        )?;
         let result = super::parse(&mut Cursor::new(&data))?;
         match result {
-            super::Packet::Unlock{passphrase, timeout} => {
+            super::Packet::Unlock {
+                passphrase,
+                timeout,
+                ..
+            } => {
                 assert_eq!(passphrase, "pass");
                 assert_eq!(timeout, 678);
-            },
-            _ => panic!("Packet type does not macth"),
+            }
+            _ => panic!("Packet type does not match."),
         }
         Ok(())
     }

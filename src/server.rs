@@ -1,13 +1,12 @@
-use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::{net::Shutdown, path::Path};
 use std::time::{Duration, Instant};
+use std::{net::Shutdown, path::Path};
+use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
 const POLL_TIMEOUT: i32 = 200;
 
 use crate::{
-    get_store_path,
     packet::{parse, Packet},
     store::{self, Credential},
 };
@@ -17,15 +16,17 @@ struct Daemon {
     passphrase: Option<String>,
     // in seconds
     timeout: Duration,
+    store_path: PathBuf,
 }
 
 impl Daemon {
-    fn new() -> std::io::Result<Daemon> {
+    fn new<P: AsRef<Path>>(socket_path: P) -> std::io::Result<Daemon> {
         Ok(Self {
-            listener: UnixListener::bind(crate::SOCKET_PATH)?,
+            listener: UnixListener::bind(socket_path)?,
             passphrase: None,
             // default to 1 sec so the daemon shutsdown if unlocking fails
             timeout: Duration::from_secs(1),
+            store_path: PathBuf::new(),
         })
     }
 
@@ -42,7 +43,11 @@ impl Daemon {
         let request = parse(&mut conn)?;
         match request {
             Packet::Lock => should_exit = true,
-            Packet::Unlock { passphrase, timeout } => self.handle_unlock(&mut conn, passphrase, timeout)?,
+            Packet::Unlock {
+                passphrase,
+                timeout,
+                store_path,
+            } => self.handle_unlock(&mut conn, store_path, passphrase, timeout)?,
             Packet::Store { credential } => self.handle_store(&mut conn, credential)?,
             Packet::Get { credential } => self.handle_get(&mut conn, &credential)?,
             Packet::Erase { credential } => self.handle_erase(&mut conn, &credential)?,
@@ -63,11 +68,13 @@ impl Daemon {
     fn handle_unlock(
         &mut self,
         conn: &mut UnixStream,
+        store_path: PathBuf,
         passphrase: String,
         timeout: u64,
     ) -> Result<(), crate::Error> {
         // try to unlock
-        let store = store::Store::decrypt_from(&get_store_path(), &passphrase);
+        self.store_path = store_path;
+        let store = store::Store::decrypt_from(&self.store_path, &passphrase);
         match store {
             Ok(_) => {
                 self.passphrase = Some(passphrase);
@@ -95,7 +102,11 @@ impl Daemon {
         credential: Credential,
     ) -> Result<(), crate::Error> {
         if self.passphrase.is_some() {
-            let result = Self::store(credential, self.passphrase.as_ref().unwrap());
+            let result = Self::store(
+                credential,
+                self.passphrase.as_ref().unwrap(),
+                &self.store_path,
+            );
             match result {
                 Ok(_) => {
                     let response = Packet::Result {
@@ -118,10 +129,10 @@ impl Daemon {
         Ok(())
     }
 
-    fn store(credential: Credential, passphrase: &str) -> Result<(), crate::Error> {
-        let mut store = store::Store::decrypt_from(&get_store_path(), passphrase)?;
+    fn store(credential: Credential, passphrase: &str, path: &Path) -> Result<(), crate::Error> {
+        let mut store = store::Store::decrypt_from(path, passphrase)?;
         store.update(credential);
-        store.encrypt_at(&get_store_path(), passphrase)?;
+        store.encrypt_at(path, passphrase)?;
         Ok(())
     }
 
@@ -131,7 +142,11 @@ impl Daemon {
         credential: &Credential,
     ) -> Result<(), crate::Error> {
         if self.passphrase.is_some() {
-            let result = Self::get(credential, self.passphrase.as_ref().unwrap());
+            let result = Self::get(
+                credential,
+                self.passphrase.as_ref().unwrap(),
+                &self.store_path,
+            );
             match result {
                 Ok(opt_credential) => {
                     if let Some(some_credential) = opt_credential {
@@ -161,8 +176,12 @@ impl Daemon {
         Ok(())
     }
 
-    fn get(credential: &Credential, passphrase: &str) -> Result<Option<Credential>, crate::Error> {
-        let store = store::Store::decrypt_from(&get_store_path(), passphrase)?;
+    fn get(
+        credential: &Credential,
+        passphrase: &str,
+        path: &Path,
+    ) -> Result<Option<Credential>, crate::Error> {
+        let store = store::Store::decrypt_from(path, passphrase)?;
         Ok(store.find(&credential.protocol, &credential.host, &credential.path))
     }
 
@@ -172,7 +191,11 @@ impl Daemon {
         credential: &Credential,
     ) -> Result<(), crate::Error> {
         if self.passphrase.is_some() {
-            let result = Self::erase(credential, self.passphrase.as_ref().unwrap());
+            let result = Self::erase(
+                credential,
+                self.passphrase.as_ref().unwrap(),
+                &self.store_path,
+            );
             match result {
                 Ok(_) => {
                     let response = Packet::Result {
@@ -195,24 +218,26 @@ impl Daemon {
         Ok(())
     }
 
-    fn erase(credential: &Credential, passphrase: &str) -> Result<(), crate::Error> {
-        let mut store = store::Store::decrypt_from(&get_store_path(), passphrase)?;
+    fn erase(credential: &Credential, passphrase: &str, path: &Path) -> Result<(), crate::Error> {
+        let mut store = store::Store::decrypt_from(path, passphrase)?;
         store.erase(&credential.protocol, &credential.host, &credential.path);
-        store.encrypt_at(&get_store_path(), passphrase)?;
+        store.encrypt_at(path, passphrase)?;
         Ok(())
     }
 }
 
-pub fn launch() -> Result<(), crate::Error> {
+/// Takes control of the current thread and runs a nicator server listening on the given path.
+/// # Errors
+/// Can fail due to I/O and filesystem related errors.
+pub fn launch<P: AsRef<Path>>(socket_path: P) -> Result<(), crate::Error> {
     // sanity check if there is already daemon listening
-    if Path::new(crate::SOCKET_PATH).exists() {
+    if socket_path.as_ref().exists() {
         println!("A nicator daemon is already running.");
         return Ok(());
     }
-    nix::unistd::daemon(false, false)?;
-    let mut daemon = Daemon::new()?;
+    let mut daemon = Daemon::new(&socket_path)?;
     let perm = std::fs::Permissions::from_mode(0o600);
-    std::fs::set_permissions(crate::SOCKET_PATH, perm)?;
+    std::fs::set_permissions(&socket_path, perm)?;
     let start_time = Instant::now();
     loop {
         if daemon.poll()? {
@@ -227,6 +252,6 @@ pub fn launch() -> Result<(), crate::Error> {
             break;
         }
     }
-    std::fs::remove_file(crate::SOCKET_PATH)?;
+    std::fs::remove_file(socket_path)?;
     Ok(())
 }

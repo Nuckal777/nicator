@@ -35,6 +35,7 @@ impl Default for Credential {
 }
 
 impl Credential {
+    #[must_use]
     pub fn from_git(git_credential: &str) -> Credential {
         let mut credential = Credential::default();
         for line in git_credential.lines() {
@@ -69,6 +70,9 @@ impl Default for Store {
 }
 
 impl Store {
+    /// Decrypts a store instance from the given reader.
+    /// # Errors
+    /// Can fail due to I/O or cryptography related errors.
     pub fn decrypt<R: std::io::Read>(
         reader: &mut R,
         passphrase: &str,
@@ -103,6 +107,9 @@ impl Store {
         Ok(store)
     }
 
+    /// Decrypts a store instance from the given path.
+    /// # Errors
+    /// Can fail due to I/O or cryptography related errors.
     pub fn decrypt_from<P: AsRef<std::path::Path>>(
         path: P,
         passphrase: &str,
@@ -111,6 +118,9 @@ impl Store {
         Self::decrypt(&mut reader, passphrase)
     }
 
+    /// Encrypts a store instance to the given writer.
+    /// # Errors
+    /// Can fail due to I/O or cryptography related errors.
     pub fn encrypt<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -143,6 +153,9 @@ impl Store {
         Ok(())
     }
 
+    /// Encrypts a store instance at the given path.
+    /// # Errors
+    /// Can fail due to I/O or cryptography related errors.
     pub fn encrypt_at<P: AsRef<std::path::Path>>(
         &self,
         path: P,
@@ -179,6 +192,7 @@ impl Store {
     /// Finds a credential in the store matching the desribed repo.
     /// Equality for protocol, host and path is checked firstly.
     /// Afterwards protocol and host equality matters.
+    #[must_use]
     pub fn find(&self, protocol: &str, host: &str, path: &str) -> Option<Credential> {
         let result = self
             .credentials
