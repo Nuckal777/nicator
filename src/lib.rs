@@ -55,105 +55,118 @@ pub fn run() {
 
 fn perform_command(command: &str, matches: Option<&ArgMatches>) {
     match command {
-        "server" => {
-            nix::unistd::daemon(false, false).expect("Failed to daemonize nicator.");
-            server::launch(&get_socket_path())
-                .expect("Failed to launch the nicator server daemon.");
-        }
-        "init" => {
-            let store_path = get_store_path().expect("Failed to determine store path.");
-            if store_path.exists() {
-                eprintln!(
-                    "A credentials file already exists at {:?}. Not overwriting.",
-                    store_path
-                );
-                return;
-            }
-            let passphrase = rpassword::prompt_password_stdout("Enter passphrase: ")
-                .expect("Failed to read passphrase from stdin.");
-            let store = store::Store::default();
-            store
-                .encrypt_at(&store_path, &passphrase)
-                .expect("Failed to create .nicator-credentials file.");
-        }
-        "lock" => {
-            if let Some(mut client) = create_client() {
-                client.lock().expect("Failed to lock the nicator store");
-            }
-        }
-        "unlock" => {
-            if !get_socket_path().exists() {
-                std::process::Command::new("nicator")
-                    .arg("server")
-                    .spawn()
-                    .expect("Failed to create nicator damon spawn process.");
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let timeout = matches.map_or(Ok(DEFAULT_TIMEOUT), |m| {
-                m.value_of("timeout")
-                    .map_or(Ok(DEFAULT_TIMEOUT), str::parse)
-            });
-            match timeout {
-                Ok(timeout) => {
-                    if let Some(mut client) = create_client() {
-                        let passphrase = rpassword::prompt_password_stdout("Enter passphrase: ")
-                            .expect("Failed to read passphrase from stdin.");
-                        client
-                            .unlock(
-                                passphrase,
-                                get_store_path().expect("Failed to determine store path."),
-                                timeout,
-                            )
-                            .expect("Failed to unlock the nicator store.")
-                    }
-                }
-                Err(_) => eprintln!("Failed to parse timeout."),
-            }
-        }
-        "store" => {
-            let mut data = Vec::<u8>::new();
-            std::io::stdin()
-                .read_to_end(&mut data)
-                .expect("Failed to read credential from stdin.");
-            let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
-            let credential = store::Credential::from_git(&git_credential);
-            if let Some(mut client) = create_client() {
-                client
-                    .store(credential)
-                    .expect("Failed to store the credential.");
-            }
-        }
-        "get" => {
-            let mut data = Vec::<u8>::new();
-            std::io::stdin()
-                .read_to_end(&mut data)
-                .expect("Failed to read credential from stdin.");
-            let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
-            let credential = store::Credential::from_git(&git_credential);
-            if let Some(mut client) = create_client() {
-                let opt_result = client
-                    .get(credential)
-                    .expect("Failed to fetch the credential.");
-                if let Some(result) = opt_result {
-                    println!("username={}", result.username);
-                    println!("password={}", result.password);
-                }
-            }
-        }
-        "erase" => {
-            let mut data = Vec::<u8>::new();
-            std::io::stdin()
-                .read_to_end(&mut data)
-                .expect("Failed to read credential from stdin.");
-            let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
-            let credential = store::Credential::from_git(&git_credential);
-            if let Some(mut client) = create_client() {
-                client
-                    .erase(credential)
-                    .expect("Failed to erase the credential.");
-            }
-        }
+        "server" => perform_server(),
+        "init" => perform_init(),
+        "lock" => perform_lock(),
+        "unlock" => perform_unlock(matches),
+        "store" => perform_store(),
+        "get" => perform_get(),
+        "erase" => perform_erase(),
         _ => println!("Unknown operation."),
+    }
+}
+
+fn perform_server() {
+    nix::unistd::daemon(false, false).expect("Failed to daemonize nicator.");
+    server::launch(&get_socket_path()).expect("Failed to launch the nicator server daemon.");
+}
+
+fn perform_init() {
+    let store_path = get_store_path().expect("Failed to determine store path.");
+    if store_path.exists() {
+        eprintln!(
+            "A credentials file already exists at {:?}. Not overwriting.",
+            store_path
+        );
+        return;
+    }
+    let passphrase = rpassword::prompt_password_stdout("Enter passphrase: ")
+        .expect("Failed to read passphrase from stdin.");
+    let store = store::Store::default();
+    store
+        .encrypt_at(&store_path, &passphrase)
+        .expect("Failed to create .nicator-credentials file.");
+}
+
+fn perform_lock() {
+    if let Some(mut client) = create_client() {
+        client.lock().expect("Failed to lock the nicator store");
+    }
+}
+
+fn perform_unlock(matches: Option<&ArgMatches>) {
+    if !get_socket_path().exists() {
+        std::process::Command::new("nicator")
+            .arg("server")
+            .spawn()
+            .expect("Failed to create nicator damon spawn process.");
+    }
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let timeout = matches.map_or(Ok(DEFAULT_TIMEOUT), |m| {
+        m.value_of("timeout")
+            .map_or(Ok(DEFAULT_TIMEOUT), str::parse)
+    });
+    match timeout {
+        Ok(timeout) => {
+            if let Some(mut client) = create_client() {
+                let passphrase = rpassword::prompt_password_stdout("Enter passphrase: ")
+                    .expect("Failed to read passphrase from stdin.");
+                client
+                    .unlock(
+                        passphrase,
+                        get_store_path().expect("Failed to determine store path."),
+                        timeout,
+                    )
+                    .expect("Failed to unlock the nicator store.")
+            }
+        }
+        Err(_) => eprintln!("Failed to parse timeout."),
+    }
+}
+
+fn perform_store() {
+    let mut data = Vec::<u8>::new();
+    std::io::stdin()
+        .read_to_end(&mut data)
+        .expect("Failed to read credential from stdin.");
+    let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
+    let credential = store::Credential::from_git(&git_credential);
+    if let Some(mut client) = create_client() {
+        client
+            .store(credential)
+            .expect("Failed to store the credential.");
+    }
+}
+
+fn perform_get() {
+    let mut data = Vec::<u8>::new();
+    std::io::stdin()
+        .read_to_end(&mut data)
+        .expect("Failed to read credential from stdin.");
+    let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
+    let credential = store::Credential::from_git(&git_credential);
+    if let Some(mut client) = create_client() {
+        let opt_result = client
+            .get(credential)
+            .expect("Failed to fetch the credential.");
+        if let Some(result) = opt_result {
+            println!("username={}", result.username);
+            println!("password={}", result.password);
+        }
+    }
+}
+
+fn perform_erase() {
+    let mut data = Vec::<u8>::new();
+    std::io::stdin()
+        .read_to_end(&mut data)
+        .expect("Failed to read credential from stdin.");
+    let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
+    let credential = store::Credential::from_git(&git_credential);
+    if let Some(mut client) = create_client() {
+        client
+            .erase(credential)
+            .expect("Failed to erase the credential.");
     }
 }
 
