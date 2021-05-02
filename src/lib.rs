@@ -4,8 +4,8 @@ use clap::{crate_authors, crate_version, App, Arg, ArgMatches, SubCommand};
 use client::Client;
 use thiserror::Error;
 
-pub mod client;
 mod packet;
+pub mod client;
 pub mod server;
 pub mod store;
 
@@ -45,7 +45,6 @@ pub fn run() {
             SubCommand::with_name("get").about("Fetches a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
             SubCommand::with_name("store").about("Stores a credential in the nicator store. Required information is read from stdin according to the git credentials format."),
             SubCommand::with_name("erase").about("Deletes a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
-            SubCommand::with_name("export"),
         ])
         .get_matches();
 
