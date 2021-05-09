@@ -89,6 +89,7 @@ impl ProgramOptions {
     }
 }
 
+#[must_use]
 pub fn run() -> Exit {
     let matches = App::new("nicator")
         .version(crate_version!())
@@ -127,24 +128,22 @@ pub fn run() -> Exit {
 
     let (name, sub_matches) = matches.subcommand();
     let options = ProgramOptions::from_matches(&matches, sub_matches);
-    match options {
-        Some(options) => perform_command(name, options),
-        None => {
-            eprintln!("Failed to parse an argument.");
-            Exit::Failure
-        }
+    if let Some(options) = options {
+        return perform_command(name, options);
     }
+    eprintln!("Failed to parse an argument.");
+    Exit::Failure
 }
 
 fn perform_command(command: &str, options: ProgramOptions) -> Exit {
     match command {
         "server" => perform_server(options),
-        "init" => return perform_init(options),
-        "lock" => return perform_lock(options),
-        "unlock" => return perform_unlock(options),
-        "store" => return perform_store(options),
-        "get" => return perform_get(options),
-        "erase" => return perform_erase(options),
+        "init" => return perform_init(&options),
+        "lock" => return perform_lock(&options),
+        "unlock" => return perform_unlock(&options),
+        "store" => return perform_store(&options),
+        "get" => return perform_get(&options),
+        "erase" => return perform_erase(&options),
         _ => eprintln!("Unknown operation."),
     };
     Exit::Failure
@@ -162,7 +161,7 @@ fn perform_server(options: ProgramOptions) {
     server::launch(abs_socket).expect("Failed to launch the nicator server daemon.");
 }
 
-fn perform_init(options: ProgramOptions) -> Exit {
+fn perform_init(options: &ProgramOptions) -> Exit {
     if options.store.exists() {
         eprintln!(
             "A credentials file already exists at {:?}. Not overwriting.",
@@ -181,13 +180,13 @@ fn perform_init(options: ProgramOptions) -> Exit {
     Exit::Success
 }
 
-fn perform_lock(options: ProgramOptions) -> Exit {
-    with_client(&options, |client| {
+fn perform_lock(options: &ProgramOptions) -> Exit {
+    with_client(options, |client| {
         client.lock().expect("Failed to lock the nicator store")
     })
 }
 
-fn perform_unlock(options: ProgramOptions) -> Exit {
+fn perform_unlock(options: &ProgramOptions) -> Exit {
     if !options.socket.exists() {
         let nicator_path =
             std::env::current_exe().expect("Failed to fetch path for nicator binary.");
@@ -202,7 +201,7 @@ fn perform_unlock(options: ProgramOptions) -> Exit {
 
     let store_path = std::fs::canonicalize(&options.store);
     match store_path {
-        Ok(store_path) => with_client(&options, |client| {
+        Ok(store_path) => with_client(options, |client| {
             let passphrase = SecUtf8::from(
                 rpassword::prompt_password_stdout("Enter passphrase: ")
                     .expect("Failed to read passphrase from stdin."),
@@ -221,28 +220,28 @@ fn perform_unlock(options: ProgramOptions) -> Exit {
     }
 }
 
-fn perform_store(options: ProgramOptions) -> Exit {
+fn perform_store(options: &ProgramOptions) -> Exit {
     let mut data = Vec::<u8>::new();
     std::io::stdin()
         .read_to_end(&mut data)
         .expect("Failed to read credential from stdin.");
     let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
     let credential = store::Credential::from_git(&git_credential);
-    with_client(&options, |client| {
+    with_client(options, |client| {
         client
             .store(credential)
             .expect("Failed to store the credential.")
     })
 }
 
-fn perform_get(options: ProgramOptions) -> Exit {
+fn perform_get(options: &ProgramOptions) -> Exit {
     let mut data = Vec::<u8>::new();
     std::io::stdin()
         .read_to_end(&mut data)
         .expect("Failed to read credential from stdin.");
     let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
     let credential = store::Credential::from_git(&git_credential);
-    with_client(&options, |client| {
+    with_client(options, |client| {
         let opt_result = client
             .get(credential)
             .expect("Failed to fetch the credential.");
@@ -253,14 +252,14 @@ fn perform_get(options: ProgramOptions) -> Exit {
     })
 }
 
-fn perform_erase(options: ProgramOptions) -> Exit {
+fn perform_erase(options: &ProgramOptions) -> Exit {
     let mut data = Vec::<u8>::new();
     std::io::stdin()
         .read_to_end(&mut data)
         .expect("Failed to read credential from stdin.");
     let git_credential = String::from_utf8(data).expect("Credential is invalid Utf8.");
     let credential = store::Credential::from_git(&git_credential);
-    with_client(&options, |client| {
+    with_client(options, |client| {
         client
             .erase(credential)
             .expect("Failed to erase the credential.")
