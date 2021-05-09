@@ -6,6 +6,8 @@ use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
 const POLL_TIMEOUT: i32 = 200;
 
+use secstr::SecUtf8;
+
 use crate::{
     packet::{parse, Packet},
     store::{self, Credential},
@@ -13,7 +15,7 @@ use crate::{
 
 struct Daemon {
     listener: UnixListener,
-    passphrase: Option<String>,
+    passphrase: Option<SecUtf8>,
     // in seconds
     timeout: Duration,
     store_path: PathBuf,
@@ -69,12 +71,12 @@ impl Daemon {
         &mut self,
         conn: &mut UnixStream,
         store_path: PathBuf,
-        passphrase: String,
+        passphrase: SecUtf8,
         timeout: u64,
     ) -> Result<(), crate::Error> {
         // try to unlock
         self.store_path = store_path;
-        let store = store::Store::decrypt_from(&self.store_path, &passphrase);
+        let store = store::Store::decrypt_from(&self.store_path, passphrase.unsecure());
         match store {
             Ok(_) => {
                 self.passphrase = Some(passphrase);
@@ -104,7 +106,7 @@ impl Daemon {
         if self.passphrase.is_some() {
             let result = Self::store(
                 credential,
-                self.passphrase.as_ref().unwrap(),
+                self.passphrase.as_ref().unwrap().unsecure(),
                 &self.store_path,
             );
             match result {
@@ -144,7 +146,7 @@ impl Daemon {
         if self.passphrase.is_some() {
             let result = Self::get(
                 credential,
-                self.passphrase.as_ref().unwrap(),
+                self.passphrase.as_ref().unwrap().unsecure(),
                 &self.store_path,
             );
             match result {
@@ -193,7 +195,7 @@ impl Daemon {
         if self.passphrase.is_some() {
             let result = Self::erase(
                 credential,
-                self.passphrase.as_ref().unwrap(),
+                self.passphrase.as_ref().unwrap().unsecure(),
                 &self.store_path,
             );
             match result {

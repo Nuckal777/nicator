@@ -1,6 +1,7 @@
 use std::{error::Error, path::PathBuf, str::FromStr};
 
 use nicator::client::Client;
+use secstr::SecUtf8;
 
 const SOCKET_PATH: &str = "./int-nicator.sock";
 const STORE_PATH: &str = "./.int-credentials";
@@ -24,7 +25,7 @@ fn run_integration() {
     std::thread::sleep(std::time::Duration::from_millis(50));
     create_client()
         .unlock(
-            PASSPHRASE.to_string(),
+            SecUtf8::from(PASSPHRASE),
             PathBuf::from_str(STORE_PATH).unwrap(),
             20,
         )
@@ -32,7 +33,7 @@ fn run_integration() {
     create_client()
         .store(nicator::store::Credential {
             host: "host1".to_string(),
-            password: "pw1".to_string(),
+            password: SecUtf8::from("pw1"),
             path: "path1".to_string(),
             protocol: "protocol1".to_string(),
             username: "user1".to_string(),
@@ -41,7 +42,7 @@ fn run_integration() {
     let opt_cred = create_client()
         .get(nicator::store::Credential {
             host: "host1".to_string(),
-            password: String::new(),
+            password: SecUtf8::from(""),
             path: "path1".to_string(),
             protocol: "protocol1".to_string(),
             username: String::new(),
@@ -51,7 +52,7 @@ fn run_integration() {
     server_thread.join().expect("Failed to join server thread.");
     let cred = opt_cred.expect("Cannot find added added credential.");
     assert_eq!(cred.username, "user1");
-    assert_eq!(cred.password, "pw1");
+    assert_eq!(cred.password.unsecure(), "pw1");
 }
 
 fn create_client() -> Client {

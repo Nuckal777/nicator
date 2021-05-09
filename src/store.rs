@@ -6,6 +6,7 @@ use chacha20poly1305::{
     ChaCha20Poly1305, Key, Nonce,
 };
 use rand_core::{OsRng, RngCore};
+use secstr::SecUtf8;
 use serde_derive::{Deserialize, Serialize};
 use std::os::unix::fs::OpenOptionsExt;
 
@@ -19,7 +20,7 @@ pub struct Credential {
     pub host: String,
     pub path: String,
     pub username: String,
-    pub password: String,
+    pub password: SecUtf8,
 }
 
 impl Default for Credential {
@@ -27,7 +28,7 @@ impl Default for Credential {
         Self {
             protocol: String::new(),
             host: String::new(),
-            password: String::new(),
+            password: SecUtf8::from(""),
             path: String::new(),
             username: String::new(),
         }
@@ -46,7 +47,7 @@ impl Credential {
             match key {
                 "protocol" => credential.protocol = value,
                 "host" => credential.host = value,
-                "password" => credential.password = value,
+                "password" => credential.password = SecUtf8::from(value),
                 "path" => credential.path = value,
                 "username" => credential.username = value,
                 _ => {}
@@ -216,19 +217,21 @@ impl Store {
 mod tests {
     use std::io::Cursor;
 
+    use secstr::SecUtf8;
+
     fn setup_store() -> super::Store {
         super::Store {
             credentials: vec![
                 super::Credential {
                     host: "host1".to_string(),
-                    password: "pw1".to_string(),
+                    password: SecUtf8::from("pw1"),
                     path: "path1".to_string(),
                     protocol: "protocol1".to_string(),
                     username: "user1".to_string(),
                 },
                 super::Credential {
                     host: "host2".to_string(),
-                    password: "pw2".to_string(),
+                    password: SecUtf8::from("pw2"),
                     path: "".to_string(),
                     protocol: "protocol2".to_string(),
                     username: "user2".to_string(),
@@ -242,7 +245,7 @@ mod tests {
         let git_str = "username=abc\npassword=e=r\nhost=github.com\nprotocol=https\npath=dfg";
         let credential = super::Credential::from_git(git_str);
         assert_eq!(credential.host, "github.com");
-        assert_eq!(credential.password, "e=r");
+        assert_eq!(credential.password.unsecure(), "e=r");
         assert_eq!(credential.path, "dfg");
         assert_eq!(credential.protocol, "https");
         assert_eq!(credential.username, "abc");
@@ -274,20 +277,20 @@ mod tests {
         let mut store = setup_store();
         store.update(super::Credential {
             host: "host1".to_string(),
-            password: "topsecret".to_string(),
+            password: SecUtf8::from("topsecret"),
             path: "path1".to_string(),
             protocol: "protocol1".to_string(),
             username: "user1".to_string(),
         });
         store.update(super::Credential {
             host: "host3".to_string(),
-            password: "pw3".to_string(),
+            password: SecUtf8::from("pw3"),
             path: "path3".to_string(),
             protocol: "protocol3".to_string(),
             username: "user3".to_string(),
         });
         assert_eq!(store.credentials.len(), 3);
-        assert_eq!(store.credentials[0].password, "topsecret");
+        assert_eq!(store.credentials[0].password.unsecure(), "topsecret");
     }
 
     #[test]

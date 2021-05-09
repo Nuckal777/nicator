@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use secstr::SecUtf8;
+
 use crate::{packet::Packet, store::Credential};
 
 pub struct Client {
@@ -24,7 +26,7 @@ impl Client {
     /// Can fail if the message is too long or I/O erros are encountered.
     pub fn unlock(
         &mut self,
-        passphrase: String,
+        passphrase: SecUtf8,
         store_path: PathBuf,
         timeout: u64,
     ) -> Result<(), crate::Error> {

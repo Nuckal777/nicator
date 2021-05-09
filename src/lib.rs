@@ -2,6 +2,7 @@ use std::{io::Read, path::PathBuf};
 
 use clap::{crate_authors, crate_version, App, Arg, ArgMatches, SubCommand};
 use client::Client;
+use secstr::SecUtf8;
 use thiserror::Error;
 
 pub mod client;
@@ -29,6 +30,8 @@ pub enum Error {
     Conversion,
     #[error("Some cryptography failed.")]
     Crypto,
+    #[error("Some string conversion failed due to invalid utf8.")]
+    Utf(#[from] std::str::Utf8Error),
 }
 
 struct ProgramOptions {
@@ -167,11 +170,13 @@ fn perform_init(options: ProgramOptions) -> Exit {
         );
         return Exit::Failure;
     }
-    let passphrase = rpassword::prompt_password_stdout("Enter passphrase: ")
-        .expect("Failed to read passphrase from stdin.");
+    let passphrase = SecUtf8::from(
+        rpassword::prompt_password_stdout("Enter passphrase: ")
+            .expect("Failed to read passphrase from stdin."),
+    );
     let store = store::Store::default();
     store
-        .encrypt_at(&options.store, &passphrase)
+        .encrypt_at(&options.store, passphrase.unsecure())
         .expect("Failed to create .nicator-credentials file.");
     Exit::Success
 }
@@ -198,15 +203,17 @@ fn perform_unlock(options: ProgramOptions) -> Exit {
     let store_path = std::fs::canonicalize(&options.store);
     match store_path {
         Ok(store_path) => with_client(&options, |client| {
-            let passphrase = rpassword::prompt_password_stdout("Enter passphrase: ")
-                .expect("Failed to read passphrase from stdin.");
+            let passphrase = SecUtf8::from(
+                rpassword::prompt_password_stdout("Enter passphrase: ")
+                    .expect("Failed to read passphrase from stdin."),
+            );
             client
                 .unlock(passphrase, store_path, options.timeout)
                 .expect("Failed to unlock the nicator store.")
         }),
         Err(err) => {
             eprintln!(
-                "Failed to canonicalize store path '{:?}': {}",
+                "Failed to canonicalize store path {:?}: {}",
                 options.store, err
             );
             Exit::Failure
@@ -241,7 +248,7 @@ fn perform_get(options: ProgramOptions) -> Exit {
             .expect("Failed to fetch the credential.");
         if let Some(result) = opt_result {
             println!("username={}", result.username);
-            println!("password={}", result.password);
+            println!("password={}", result.password.unsecure());
         }
     })
 }

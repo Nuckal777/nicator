@@ -28,6 +28,5 @@ Nicator encrypts credentials using 256-bit AES.
 The passphrase is hashed using Argon2id.
 
 ## Security considerations
-Right now the nicator process memory can be swapped to the swapfile/-partition.
-You may want to encrypt your swap space.
-You should trust the root user on your system.
+- You should trust the root user on your system.
+- When hibernating your nicator password may be written to the disk if a nicator server is still running

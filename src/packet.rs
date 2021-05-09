@@ -1,13 +1,14 @@
 use std::{convert::TryInto, path::PathBuf};
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use secstr::SecUtf8;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub enum Packet {
     Lock,
     Unlock {
-        passphrase: String,
+        passphrase: SecUtf8,
         store_path: PathBuf,
         timeout: u64,
     },
@@ -49,13 +50,15 @@ pub fn write<W: std::io::Write>(writer: &mut W, packet: &Packet) -> Result<(), c
 mod tests {
     use std::{io::Cursor, path::PathBuf};
 
+    use secstr::SecUtf8;
+
     #[test]
     fn write_parse() -> Result<(), crate::Error> {
         let mut data = Vec::<u8>::new();
         super::write(
             &mut Cursor::new(&mut data),
             &super::Packet::Unlock {
-                passphrase: "pass".to_string(),
+                passphrase: SecUtf8::from("pass"),
                 timeout: 678,
                 store_path: PathBuf::new(),
             },
@@ -67,7 +70,7 @@ mod tests {
                 timeout,
                 ..
             } => {
-                assert_eq!(passphrase, "pass");
+                assert_eq!(passphrase.unsecure(), "pass");
                 assert_eq!(timeout, 678);
             }
             _ => panic!("Packet type does not match."),
