@@ -2,8 +2,8 @@ use std::{error::Error, path::PathBuf, str::FromStr};
 
 use nicator::client::Client;
 
-const SOCKET_PATH: &str = "./nicator.sock";
-const STORE_PATH: &str = "./.nicator-credentials";
+const SOCKET_PATH: &str = "./int-nicator.sock";
+const STORE_PATH: &str = "./.int-credentials";
 const PASSPHRASE: &str = "pw123";
 
 #[test]

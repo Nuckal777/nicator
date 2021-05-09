@@ -13,13 +13,12 @@ Therefore it should be decently secure.
 Most of nicators dependencies are statically linked, so it does not require any uncommon dependencies.
 
 ## Usage
-1. Add `nicator` somewhrere on your `$PATH`.
-2. Execute `nicator init` to create the credentials file and set an initial password.
-3. Set `nicator` as your git-credential-helper: `git config --global credential.helper $(which nicator)`
-4. Execute `nicator unlock` to enable storing and fetching credentials.
-5. Execute `nicator lock` to disable storing and fetching credentials.
+1. Execute `nicator init` to create the credentials file and set an initial password.
+2. Set `nicator` as your git-credential-helper: `git config --global credential.helper /path/to/nicator`
+3. Execute `nicator unlock` to enable storing and fetching credentials.
+4. Execute `nicator lock` to disable storing and fetching credentials.
 
-`nicator unlock -t SECONDS` allows specifying a timeout after which the credentials become inaccessable. It defaults to 1 hour. It might be handy to create a shell alias to change it consitently.
+`nicator unlock -t SECONDS` allows specifying a timeout after which the credentials become inaccessable. It defaults to 1 hour. It might be handy to create a shell alias to change it consitently. The `-c` and `-s` flags can be used to change the path used for the credentials file and socket file respectively. These should not leak any data as long these files are only readable and writeable by the the file's owner, which nicator takes care of.
 
 ## How nicator works
 Unlocking will automatically launch a nicator server/daemon process listening on a unix socket with appropriate permissions (found in `/tmp`), which keeps the password in-memory.
@@ -31,3 +30,4 @@ The passphrase is hashed using Argon2id.
 ## Security considerations
 Right now the nicator process memory can be swapped to the swapfile/-partition.
 You may want to encrypt your swap space.
+You should trust the root user on your system.

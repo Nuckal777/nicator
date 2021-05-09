@@ -1,3 +1,3 @@
 fn main() {
-    nicator::run();
+    std::process::exit(nicator::run() as i32);
 }
