@@ -6,6 +6,7 @@ description = "A lightweight encrypting git credential helper"
 readme = "README.md"
 license = "Unlicense"
 edition = "2018"
+repository = "https://github.com/Nuckal777/nicator"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

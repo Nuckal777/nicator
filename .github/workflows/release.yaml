@@ -1,0 +1,40 @@
+name: Create release
+on: 
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release name, something like vX.X.X"
+        required: true
+env:
+  TARGET_VERSION: ${{ github.event.inputs.version }}
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+                CRATE_VERSION=$(cat Cargo.toml | grep ^version | awk '{ print $3 }' | tr -d '"')
+                CRATE_VERSION=v${CRATE_VERSION}
+                echo version in Cargo.toml is $CRATE_VERSION
+                echo version in workflow is $TARGET_VERSION
+                if [ "$CRATE_VERSION" = "$TARGET_VERSION" ]; then
+                  exit 0
+                else
+                  exit 1
+                fi
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo test --locked --all-features --release
+      - run: cargo install cargo-deb
+      - run: cargo deb
+      - run: mv target/release/nicator target/release/nicator_${TARGET_VERSION}
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "target/release/nicator_${{ github.event.inputs.version }},target/debian/*.deb"
+          artifactErrorsFailBuild: true
+          commit: ${{ github.sha }}
+          bodyFile: release-notes/${{ github.event.inputs.version }}.md
+          tag: ${{ github.event.inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
