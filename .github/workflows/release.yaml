@@ -1,0 +1,15 @@
+name: release
+on: 
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release name, something like vX.X.X"
+        required: true
+env:
+  TARGET_VERSION: ${{ github.event.inputs.version }}
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
