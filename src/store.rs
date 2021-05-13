@@ -8,7 +8,7 @@ use chacha20poly1305::{
 use rand_core::{OsRng, RngCore};
 use secstr::SecUtf8;
 use serde_derive::{Deserialize, Serialize};
-use std::os::unix::fs::OpenOptionsExt;
+use std::{os::unix::fs::OpenOptionsExt, slice::Iter};
 
 const SALT_LEN: usize = 22;
 const NONCE_LEN: usize = 12;
@@ -165,6 +165,7 @@ impl Store {
         let mut writer = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(true)
             .mode(0o600)
             .open(path)?;
         self.encrypt(&mut writer, passphrase)?;
@@ -207,9 +208,16 @@ impl Store {
         })
     }
 
+    /// Deletes all credentials with matching protocol, host and path from the store.
     pub fn erase(&mut self, protocol: &str, host: &str, path: &str) {
         self.credentials
             .retain(|cred| !(cred.protocol == protocol && cred.host == host && cred.path == path));
+    }
+
+    /// Returns an iterator over all stored credentials.
+    #[must_use]
+    pub fn iter(&self) -> Iter<Credential> {
+        self.credentials.iter()
     }
 }
 
@@ -309,5 +317,12 @@ mod tests {
         let not_found = store.find("protocol1", "host1", "");
         assert!(found.is_some());
         assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn iter() {
+        let store = setup_store();
+        let iter = store.iter();
+        assert_eq!(iter.count(), 2);
     }
 }

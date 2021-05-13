@@ -1,4 +1,8 @@
 # Nicator
+
+![Build Status](https://img.shields.io/github/workflow/status/Nuckal777/nicator/test)
+[![Coverage Status](https://coveralls.io/repos/github/Nuckal777/nicator/badge.svg?branch=master)](https://coveralls.io/github/Nuckal777/nicator?branch=master)
+
 A lightweight encrypting git credential helper (for Linux)
 
 ## Motivation
@@ -13,10 +17,11 @@ Therefore it should be decently secure.
 Most of nicators dependencies are statically linked, so it does not require any uncommon dependencies.
 
 ## Usage
-1. Execute `nicator init` to create the credentials file and set an initial password.
-2. Set `nicator` as your git-credential-helper: `git config --global credential.helper /path/to/nicator`
-3. Execute `nicator unlock` to enable storing and fetching credentials.
-4. Execute `nicator lock` to disable storing and fetching credentials.
+1. Add `nicator` somewhere on your `$PATH`.
+2. Execute `nicator init` to create the credentials file and set an initial password.
+3. Set `nicator` as your git-credential-helper: `git config --global credential.helper /path/to/nicator`.
+4. Execute `nicator unlock` to enable storing and fetching credentials.
+5. Execute `nicator lock` to disable storing and fetching credentials.
 
 `nicator unlock -t SECONDS` allows specifying a timeout after which the credentials become inaccessable. It defaults to 1 hour. It might be handy to create a shell alias to change it consitently. The `-c` and `-s` flags can be used to change the path used for the credentials file and socket file respectively. These should not leak any data as long these files are only readable and writeable by the the file's owner, which nicator takes care of.
 

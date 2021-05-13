@@ -109,6 +109,7 @@ pub fn run() -> Exit {
             SubCommand::with_name("get").about("Fetches a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
             SubCommand::with_name("store").about("Stores a credential in the nicator store. Required information is read from stdin according to the git credentials format."),
             SubCommand::with_name("erase").about("Deletes a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
+            SubCommand::with_name("export").about("Prints out all stored credentials."),
         ])
         .args(&[
             Arg::with_name("socket")
@@ -122,7 +123,7 @@ pub fn run() -> Exit {
                 .long("credentials")
                 .help("Path to the credential store. Defaults to '$HOME/.nicator-credentials'.")
                 .value_name("PATH")
-                .takes_value(true)
+                .takes_value(true),
         ])
         .get_matches();
 
@@ -137,19 +138,20 @@ pub fn run() -> Exit {
 
 fn perform_command(command: &str, options: ProgramOptions) -> Exit {
     match command {
-        "server" => perform_server(options),
+        "server" => return perform_server(options),
         "init" => return perform_init(&options),
         "lock" => return perform_lock(&options),
         "unlock" => return perform_unlock(&options),
         "store" => return perform_store(&options),
         "get" => return perform_get(&options),
         "erase" => return perform_erase(&options),
+        "export" => return perform_export(&options),
         _ => eprintln!("Unknown operation."),
     };
     Exit::Failure
 }
 
-fn perform_server(options: ProgramOptions) {
+fn perform_server(options: ProgramOptions) -> Exit {
     let abs_socket = if options.socket.is_absolute() {
         options.socket
     } else {
@@ -159,6 +161,7 @@ fn perform_server(options: ProgramOptions) {
     };
     nix::unistd::daemon(false, false).expect("Failed to daemonize nicator.");
     server::launch(abs_socket).expect("Failed to launch the nicator server daemon.");
+    Exit::Success
 }
 
 fn perform_init(options: &ProgramOptions) -> Exit {
@@ -264,6 +267,30 @@ fn perform_erase(options: &ProgramOptions) -> Exit {
             .erase(credential)
             .expect("Failed to erase the credential.")
     })
+}
+
+fn perform_export(options: &ProgramOptions) -> Exit {
+    let passphrase = SecUtf8::from(
+        rpassword::prompt_password_stdout("Enter passphrase: ")
+            .expect("Failed to read passphrase from stdin."),
+    );
+    let store = store::Store::decrypt_from(&options.store, passphrase.unsecure());
+    match store {
+        Ok(store) => {
+            for cred in store.iter() {
+                println!("protocol={}", cred.protocol);
+                println!("host={}", cred.host);
+                println!("path={}", cred.path);
+                println!("username={}", cred.username);
+                println!("password={}", cred.password.unsecure());
+            }
+        }
+        Err(err) => {
+            eprintln!("Failed to export credentials: {}", err);
+            return Exit::Failure;
+        }
+    }
+    Exit::Success
 }
 
 fn with_client<H: FnOnce(&mut Client)>(options: &ProgramOptions, handler: H) -> Exit {

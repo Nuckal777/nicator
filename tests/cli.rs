@@ -13,6 +13,7 @@ fn cli() {
     let (unlock_result, _) = spawn_nicator(&["unlock"], PASSPHRASE);
     let (store_result, _) = spawn_nicator(&["store"], WRITE_CRED);
     let (get_result, get_output) = spawn_nicator(&["get"], READ_CRED);
+    let (export_result, export_output) = spawn_nicator(&["export"], PASSPHRASE);
     let (erase_result, _) = spawn_nicator(&["erase"], READ_CRED);
     let (lock_result, _) = spawn_nicator(&["lock"], PASSPHRASE);
     std::fs::remove_file(STORE_PATH).ok();
@@ -22,6 +23,12 @@ fn cli() {
     assert!(get_result.success());
     assert!(get_output.contains("username=user"));
     assert!(get_output.contains("password=pw"));
+    assert!(export_result.success());
+    assert!(export_output.contains("username=user"));
+    assert!(export_output.contains("password=pw"));
+    assert!(export_output.contains("protocol=http"));
+    assert!(export_output.contains("host=test.com"));
+    assert!(export_output.contains("path="));
     assert!(erase_result.success());
     assert!(lock_result.success());
 }
