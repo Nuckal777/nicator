@@ -185,7 +185,7 @@ fn perform_init(options: &ProgramOptions) -> Exit {
 
 fn perform_lock(options: &ProgramOptions) -> Exit {
     with_client(options, |client| {
-        client.lock().expect("Failed to lock the nicator store")
+        client.lock().expect("Failed to lock the nicator store");
     })
 }
 
@@ -211,7 +211,7 @@ fn perform_unlock(options: &ProgramOptions) -> Exit {
             );
             client
                 .unlock(passphrase, store_path, options.timeout)
-                .expect("Failed to unlock the nicator store.")
+                .expect("Failed to unlock the nicator store.");
         }),
         Err(err) => {
             eprintln!(
@@ -233,7 +233,7 @@ fn perform_store(options: &ProgramOptions) -> Exit {
     with_client(options, |client| {
         client
             .store(credential)
-            .expect("Failed to store the credential.")
+            .expect("Failed to store the credential.");
     })
 }
 
@@ -265,7 +265,7 @@ fn perform_erase(options: &ProgramOptions) -> Exit {
     with_client(options, |client| {
         client
             .erase(credential)
-            .expect("Failed to erase the credential.")
+            .expect("Failed to erase the credential.");
     })
 }
 

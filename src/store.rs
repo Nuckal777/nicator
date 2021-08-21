@@ -102,7 +102,7 @@ impl Store {
         let mut cipher = ChaCha20Poly1305::new(key);
         let nonce = Nonce::from_slice(&nonce_data);
         let plain = cipher
-            .decrypt(&nonce, store_data.as_slice())
+            .decrypt(nonce, store_data.as_slice())
             .map_err(|_| crate::Error::Crypto)?;
         let store = bincode::deserialize(&plain)?;
         Ok(store)
