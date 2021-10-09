@@ -90,7 +90,7 @@ impl Store {
         // Argon2 with default params (Argon2id v19)
         let argon2 = Argon2::default();
         let password_hash = argon2
-            .hash_password_simple(
+            .hash_password(
                 passphrase.as_bytes(),
                 std::str::from_utf8(&salt_data).map_err(|_| crate::Error::Crypto)?,
             )
@@ -131,7 +131,7 @@ impl Store {
         // Argon2 with default params (Argon2id v19)
         let argon2 = Argon2::default();
         let password_hash = argon2
-            .hash_password_simple(passphrase.as_bytes(), salt.as_ref())
+            .hash_password(passphrase.as_bytes(), salt.as_ref())
             .map_err(|_| crate::Error::Crypto)?
             .hash
             .ok_or(crate::Error::Crypto)?;
