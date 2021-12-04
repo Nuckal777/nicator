@@ -30,6 +30,8 @@ pub enum Error {
     Conversion,
     #[error("Some cryptography failed.")]
     Crypto,
+    #[error("Found no user object.")]
+    NoUser,
     #[error("Some string conversion failed due to invalid utf8.")]
     Utf(#[from] std::str::Utf8Error),
 }
@@ -38,54 +40,56 @@ struct ProgramOptions {
     timeout: u64,
     store: PathBuf,
     socket: PathBuf,
+    git_credentials: PathBuf,
 }
 
 impl ProgramOptions {
-    fn from_matches(global: &ArgMatches, sub: Option<&ArgMatches>) -> Option<ProgramOptions> {
-        Some(ProgramOptions {
-            store: Self::get_store_path(global)?,
+    fn from_matches(
+        global: &ArgMatches,
+        sub: Option<&ArgMatches>,
+    ) -> Result<ProgramOptions, Error> {
+        let uid = nix::unistd::getuid();
+        let user = nix::unistd::User::from_uid(uid)?.ok_or(Error::NoUser)?;
+        Ok(ProgramOptions {
+            git_credentials: Self::get_git_cred_path(sub, &user),
+            store: Self::get_store_path(global, &user),
             socket: Self::get_socket_path(global),
             timeout: sub
                 .map_or(Ok(DEFAULT_TIMEOUT), |m| {
                     m.value_of("timeout")
                         .map_or(Ok(DEFAULT_TIMEOUT), str::parse)
                 })
-                .ok()?,
+                .map_err(|_| Error::Conversion)?,
         })
     }
 
-    fn get_default_store_path() -> Result<PathBuf, crate::Error> {
-        let uid = nix::unistd::getuid();
-        let user = nix::unistd::User::from_uid(uid)?;
-        let mut store_path = user.expect("Cannot get user from process uid.").dir;
-        store_path.push(STORE_FILE_NAME);
-        Ok(store_path)
-    }
-
-    fn get_store_path(matches: &ArgMatches) -> Option<PathBuf> {
-        if let Some(path) = matches.value_of("credentials") {
-            return Some(PathBuf::from(path));
+    fn get_git_cred_path(matches: Option<&ArgMatches>, user: &nix::unistd::User) -> PathBuf {
+        if let Some(matches) = matches {
+            if let Some(path) = matches.value_of("git") {
+                return PathBuf::from(path);
+            }
         }
-        Self::get_default_store_path().map_or_else(
-            |err| {
-                eprintln!("Failed to determine default store path. Error: {}", err);
-                None
-            },
-            Option::Some,
-        )
+        let mut git_cred_path = user.dir.clone();
+        git_cred_path.push(".git-credentials");
+        git_cred_path
     }
 
-    fn get_default_socket_path() -> PathBuf {
-        let uid = nix::unistd::getuid();
-        let file_name = format!("/tmp/nicator-{}.sock", uid);
-        PathBuf::from(file_name)
+    fn get_store_path(matches: &ArgMatches, user: &nix::unistd::User) -> PathBuf {
+        if let Some(path) = matches.value_of("credentials") {
+            return PathBuf::from(path);
+        }
+        let mut store_path = user.dir.clone();
+        store_path.push(STORE_FILE_NAME);
+        store_path
     }
 
     fn get_socket_path(matches: &ArgMatches) -> PathBuf {
         if let Some(path) = matches.value_of("socket") {
             return PathBuf::from(path);
         }
-        Self::get_default_socket_path()
+        let uid = nix::unistd::getuid();
+        let file_name = format!("/tmp/nicator-{}.sock", uid);
+        PathBuf::from(file_name)
     }
 }
 
@@ -110,6 +114,14 @@ pub fn run() -> Exit {
             SubCommand::with_name("store").about("Stores a credential in the nicator store. Required information is read from stdin according to the git credentials format."),
             SubCommand::with_name("erase").about("Deletes a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
             SubCommand::with_name("export").about("Prints out all stored credentials."),
+            SubCommand::with_name("import").about("Imports a .git-credentials into the nicator store.").arg(
+                Arg::with_name("git")
+                    .short("g")
+                    .long("git")
+                    .help("Path to .git-credentials. Defaults to ~/.git-credentials")
+                    .value_name("PATH")
+                    .takes_value(true)
+            ),
         ])
         .args(&[
             Arg::with_name("socket")
@@ -129,11 +141,13 @@ pub fn run() -> Exit {
 
     let (name, sub_matches) = matches.subcommand();
     let options = ProgramOptions::from_matches(&matches, sub_matches);
-    if let Some(options) = options {
-        return perform_command(name, options);
+    match options {
+        Ok(options) => perform_command(name, options),
+        Err(err) => {
+            eprintln!("Failed to determine arguments. {}", err);
+            Exit::Failure
+        }
     }
-    eprintln!("Failed to parse an argument.");
-    Exit::Failure
 }
 
 fn perform_command(command: &str, options: ProgramOptions) -> Exit {
@@ -146,6 +160,7 @@ fn perform_command(command: &str, options: ProgramOptions) -> Exit {
         "get" => return perform_get(&options),
         "erase" => return perform_erase(&options),
         "export" => return perform_export(&options),
+        "import" => return perform_import(&options),
         _ => eprintln!("Unknown operation."),
     };
     Exit::Failure
@@ -291,6 +306,48 @@ fn perform_export(options: &ProgramOptions) -> Exit {
         }
     }
     Exit::Success
+}
+
+fn perform_import(options: &ProgramOptions) -> Exit {
+    let passphrase = SecUtf8::from(
+        rpassword::prompt_password_stdout("Enter passphrase: ")
+            .expect("Failed to read passphrase from stdin."),
+    );
+    let git_credentials =
+        std::fs::read_to_string(&options.git_credentials).map(SecUtf8::from);
+    if git_credentials.is_err() {
+        eprintln!("Failed to open .git-credentials");
+        return Exit::Failure;
+    }
+    let credentials: Result<Vec<store::Credential>, url::ParseError> = git_credentials
+        .unwrap()
+        .unsecure()
+        .lines()
+        .map(store::Credential::from_url)
+        .collect();
+    if credentials.is_err() {
+        eprintln!("Failed to parse .git-credentials file.");
+        return Exit::Failure
+    }
+    let store = store::Store::decrypt_from(&options.store, passphrase.unsecure());
+    match store {
+        Ok(mut store) => {
+            for cred in credentials.unwrap() {
+                store.update(cred);
+            }
+            match store.encrypt_at(&options.store, passphrase.unsecure()) {
+                Ok(_) => Exit::Success,
+                Err(err) => {
+                    eprintln!("Failed to store imported credentials. {}", err);
+                    Exit::Failure
+                },
+            }
+        }
+        Err(err) => {
+            eprintln!("Failed to import credentials: {}", err);
+            Exit::Failure
+        }
+    }
 }
 
 fn with_client<H: FnOnce(&mut Client)>(options: &ProgramOptions, handler: H) -> Exit {

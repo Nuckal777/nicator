@@ -5,6 +5,7 @@ use chacha20poly1305::{
     aead::{AeadMut, NewAead},
     ChaCha20Poly1305, Key, Nonce,
 };
+use percent_encoding::percent_decode_str;
 use rand_core::{OsRng, RngCore};
 use secstr::SecUtf8;
 use serde_derive::{Deserialize, Serialize};
@@ -55,19 +56,36 @@ impl Credential {
         }
         credential
     }
+
+    /// Creates a credential from the given url.
+    /// # Errors
+    /// If the url is not valid.
+    pub fn from_url(url_str: &str) -> Result<Credential, url::ParseError> {
+        let url = url::Url::parse(url_str)?;
+        let port = url.port().map_or(String::new(), |p| format!(":{}", p));
+        Ok(Credential {
+            host: url.host_str().unwrap_or("").to_string() + &port,
+            // leading slash is not required for git
+            path: url.path()[1..].to_string(),
+            protocol: url.scheme().to_string(),
+            // decode percent encoding 
+            password: SecUtf8::from(
+                percent_decode_str(url.password().unwrap_or(""))
+                    .decode_utf8()
+                    .expect("failed to decode percent encoded password.")
+                    .to_string(),
+            ),
+            username: percent_decode_str(url.username())
+                .decode_utf8()
+                .expect("failed to decode percent encoded username.")
+                .to_string(),
+        })
+    }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct Store {
     credentials: Vec<Credential>,
-}
-
-impl Default for Store {
-    fn default() -> Self {
-        Self {
-            credentials: Vec::new(),
-        }
-    }
 }
 
 impl Store {
@@ -223,7 +241,7 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{error::Error, io::Cursor};
 
     use secstr::SecUtf8;
 
@@ -257,6 +275,18 @@ mod tests {
         assert_eq!(credential.path, "dfg");
         assert_eq!(credential.protocol, "https");
         assert_eq!(credential.username, "abc");
+    }
+
+    #[test]
+    fn credential_from_url() -> Result<(), Box<dyn Error>> {
+        let url_str = "https://abc:e=r@github.com/dfg";
+        let credential = super::Credential::from_url(url_str)?;
+        assert_eq!(credential.host, "github.com");
+        assert_eq!(credential.password.unsecure(), "e=r");
+        assert_eq!(credential.path, "dfg");
+        assert_eq!(credential.protocol, "https");
+        assert_eq!(credential.username, "abc");
+        Ok(())
     }
 
     #[test]
