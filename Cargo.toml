@@ -1,6 +1,6 @@
 [package]
 name = "nicator"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Erik Schubert <nuckal777+nicator@gmail.com>"]
 description = "A lightweight encrypting git credential helper"
 readme = "README.md"
