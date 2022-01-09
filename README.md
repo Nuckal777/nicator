@@ -23,7 +23,11 @@ Most of nicators dependencies are statically linked, so it does not require any 
 4. Execute `nicator unlock` to enable storing and fetching credentials.
 5. Execute `nicator lock` to disable storing and fetching credentials.
 
-`nicator unlock -t SECONDS` allows specifying a timeout after which the credentials become inaccessible. It defaults to 1 hour. It might be handy to create a shell alias to change it consistently. The `-c` and `-s` flags can be used to change the path used for the credentials file and socket file respectively. These should not leak any data as long these files are only readable and writeable by the the file's owner, which nicator takes care of.
+`nicator unlock -t SECONDS` allows specifying a timeout after which the credentials become inaccessible.
+It defaults to 1 hour. It might be handy to create a shell alias to change it consistently. The `-c` and `-s` flags can be used to change the path used for the credentials file and socket file respectively.
+These should not leak any data as long these files are only readable and writeable by the the file's owner, which nicator takes care of when creating these.
+
+An existing `.git-credentials` file can be imported using `nicator import`.
 
 ## How nicator works
 Unlocking will automatically launch a nicator server/daemon process listening on a unix socket with appropriate permissions (found in `/tmp`), which keeps the password in-memory.

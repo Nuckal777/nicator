@@ -313,8 +313,7 @@ fn perform_import(options: &ProgramOptions) -> Exit {
         rpassword::prompt_password_stdout("Enter passphrase: ")
             .expect("Failed to read passphrase from stdin."),
     );
-    let git_credentials =
-        std::fs::read_to_string(&options.git_credentials).map(SecUtf8::from);
+    let git_credentials = std::fs::read_to_string(&options.git_credentials).map(SecUtf8::from);
     if git_credentials.is_err() {
         eprintln!("Failed to open .git-credentials");
         return Exit::Failure;
@@ -323,11 +322,17 @@ fn perform_import(options: &ProgramOptions) -> Exit {
         .unwrap()
         .unsecure()
         .lines()
-        .map(store::Credential::from_url)
+        .filter_map(|s| {
+            if s.is_empty() {
+                None
+            } else {
+                Some(store::Credential::from_url(s))
+            }
+        })
         .collect();
     if credentials.is_err() {
         eprintln!("Failed to parse .git-credentials file.");
-        return Exit::Failure
+        return Exit::Failure;
     }
     let store = store::Store::decrypt_from(&options.store, passphrase.unsecure());
     match store {
@@ -340,7 +345,7 @@ fn perform_import(options: &ProgramOptions) -> Exit {
                 Err(err) => {
                     eprintln!("Failed to store imported credentials. {}", err);
                     Exit::Failure
-                },
+                }
             }
         }
         Err(err) => {

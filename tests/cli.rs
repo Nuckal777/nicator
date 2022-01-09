@@ -5,7 +5,7 @@ const SOCKET_PATH: &str = "./cli-nicator.sock";
 const STORE_PATH: &str = "./.cli-credentials";
 const GIT_PATH: &str = "./.git-credentials";
 const PASSPHRASE: &[u8] = b"abc123\n";
-const GIT_CRED: &[u8] = b"https://gituser:gitpw@git.com/repo";
+const GIT_CRED: &[u8] = b"\nhttps://gituser:gitpw@git.com/repo";
 const WRITE_CRED: &[u8] = b"host=test.com\nprotocol=http\nusername=user\npassword=pw\n";
 const READ_CRED: &[u8] = b"host=test.com\nprotocol=http";
 
