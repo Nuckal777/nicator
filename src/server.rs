@@ -1,5 +1,7 @@
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{net::Shutdown, path::Path};
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
@@ -237,11 +239,13 @@ pub fn launch<P: AsRef<Path>>(socket_path: P) -> Result<(), crate::Error> {
         println!("A nicator daemon is already running.");
         return Ok(());
     }
+    let terminate = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, terminate.clone())?;
     let mut daemon = Daemon::new(&socket_path)?;
     let perm = std::fs::Permissions::from_mode(0o600);
     std::fs::set_permissions(&socket_path, perm)?;
     let start_time = Instant::now();
-    loop {
+    while !terminate.load(Ordering::Relaxed) {
         if daemon.poll()? {
             let exit = daemon.accept()?;
             if exit {
