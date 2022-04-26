@@ -187,10 +187,7 @@ fn perform_init(options: &ProgramOptions) -> Exit {
         );
         return Exit::Failure;
     }
-    let passphrase = SecUtf8::from(
-        rpassword::prompt_password_stdout("Enter passphrase: ")
-            .expect("Failed to read passphrase from stdin."),
-    );
+    let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
     let store = store::Store::default();
     store
         .encrypt_at(&options.store, passphrase.unsecure())
@@ -220,10 +217,7 @@ fn perform_unlock(options: &ProgramOptions) -> Exit {
     let store_path = std::fs::canonicalize(&options.store);
     match store_path {
         Ok(store_path) => with_client(options, |client| {
-            let passphrase = SecUtf8::from(
-                rpassword::prompt_password_stdout("Enter passphrase: ")
-                    .expect("Failed to read passphrase from stdin."),
-            );
+            let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
             client
                 .unlock(passphrase, store_path, options.timeout)
                 .expect("Failed to unlock the nicator store.");
@@ -285,10 +279,7 @@ fn perform_erase(options: &ProgramOptions) -> Exit {
 }
 
 fn perform_export(options: &ProgramOptions) -> Exit {
-    let passphrase = SecUtf8::from(
-        rpassword::prompt_password_stdout("Enter passphrase: ")
-            .expect("Failed to read passphrase from stdin."),
-    );
+    let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
     let store = store::Store::decrypt_from(&options.store, passphrase.unsecure());
     match store {
         Ok(store) => {
@@ -309,10 +300,7 @@ fn perform_export(options: &ProgramOptions) -> Exit {
 }
 
 fn perform_import(options: &ProgramOptions) -> Exit {
-    let passphrase = SecUtf8::from(
-        rpassword::prompt_password_stdout("Enter passphrase: ")
-            .expect("Failed to read passphrase from stdin."),
-    );
+    let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
     let git_credentials = std::fs::read_to_string(&options.git_credentials).map(SecUtf8::from);
     if git_credentials.is_err() {
         eprintln!("Failed to open .git-credentials");
@@ -362,4 +350,13 @@ fn with_client<H: FnOnce(&mut Client)>(options: &ProgramOptions, handler: H) -> 
     }
     eprintln!("Failed to connect to the nicator server daemon. Cannot find socket file. You may need to `nicator unlock`.");
     Exit::Failure
+}
+
+fn prompt_passphrase() -> std::io::Result<SecUtf8> {
+    let passphrase = SecUtf8::from(rpassword::prompt_password_from_bufread(
+        &mut std::io::stdin().lock(),
+        &mut std::io::stdout().lock(),
+        "Enter passphrase: ",
+    )?);
+    Ok(passphrase)
 }
