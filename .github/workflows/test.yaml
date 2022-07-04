@@ -9,6 +9,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v1
       - run: cargo test --locked --all-features
   lints:
     name: Lints
@@ -19,6 +20,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+      - uses: Swatinem/rust-cache@v1
       - run: cargo clippy -- -D warnings -W clippy::all -W clippy::pedantic
   coverage:
     name: Test Coverage Nightly
@@ -29,6 +31,7 @@ jobs:
         with:
           toolchain: nightly
           override: true
+      - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
         with:
           command: test

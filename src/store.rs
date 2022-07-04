@@ -233,7 +233,6 @@ impl Store {
     }
 
     /// Returns an iterator over all stored credentials.
-    #[must_use]
     pub fn iter(&self) -> Iter<Credential> {
         self.credentials.iter()
     }
