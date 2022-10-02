@@ -1,10 +1,13 @@
-use std::{io::{Read, Write}, process::{Command, ExitStatus, Stdio}};
+use std::{
+    io::{Read, Write},
+    process::{Command, ExitStatus, Stdio},
+};
 
 const BINARY_PATH: &str = env!("CARGO_BIN_EXE_nicator");
 const SOCKET_PATH: &str = "./cli-nicator.sock";
 const STORE_PATH: &str = "./.cli-credentials";
 const GIT_PATH: &str = "./.git-credentials";
-const PASSPHRASE: &[u8] = b"abc123\n";
+const PASSPHRASE: &str = "abc123";
 const GIT_CRED: &[u8] = b"\nhttps://gituser:gitpw@git.com/repo";
 const WRITE_CRED: &[u8] = b"host=test.com\nprotocol=http\nusername=user\npassword=pw\n";
 const READ_CRED: &[u8] = b"host=test.com\nprotocol=http";
@@ -12,14 +15,14 @@ const READ_CRED: &[u8] = b"host=test.com\nprotocol=http";
 #[test]
 fn cli() {
     std::fs::write(GIT_PATH, GIT_CRED).expect("Failed to create mock .git_credentials");
-    let (init_result, _) = spawn_nicator(&["init"], PASSPHRASE);
-    let (import_result, _) = spawn_nicator(&["import", "-g", GIT_PATH], PASSPHRASE);
-    let (unlock_result, _) = spawn_nicator(&["unlock"], PASSPHRASE);
+    let (init_result, _) = spawn_nicator(&["-p", PASSPHRASE, "init"], &[]);
+    let (import_result, _) = spawn_nicator(&["-p", PASSPHRASE, "import", "-g", GIT_PATH], &[]);
+    let (unlock_result, _) = spawn_nicator(&["-p", PASSPHRASE, "unlock"], &[]);
     let (store_result, _) = spawn_nicator(&["store"], WRITE_CRED);
     let (get_result, get_output) = spawn_nicator(&["get"], READ_CRED);
-    let (export_result, export_output) = spawn_nicator(&["export"], PASSPHRASE);
+    let (export_result, export_output) = spawn_nicator(&["-p", PASSPHRASE, "export"], &[]);
     let (erase_result, _) = spawn_nicator(&["erase"], READ_CRED);
-    let (lock_result, _) = spawn_nicator(&["lock"], PASSPHRASE);
+    let (lock_result, _) = spawn_nicator(&["lock"], &[]);
     std::fs::remove_file(GIT_PATH).ok();
     std::fs::remove_file(STORE_PATH).ok();
     assert!(init_result.success());
@@ -60,7 +63,12 @@ fn spawn_nicator(args: &[&str], input: &[u8]) -> (ExitStatus, String) {
     drop(stdin);
     let mut stdout = handle.stdout.take().unwrap();
     let mut output = Vec::<u8>::new();
-    stdout.read_to_end(&mut output).expect("Failed to read nicator output.");
+    stdout
+        .read_to_end(&mut output)
+        .expect("Failed to read nicator output.");
     let output = String::from_utf8(output).expect("Output is invalid utf8.");
-    (handle.wait().expect("Failed to await nicator process."), output)
+    (
+        handle.wait().expect("Failed to await nicator process."),
+        output,
+    )
 }

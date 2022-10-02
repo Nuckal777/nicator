@@ -1,10 +1,8 @@
 use argon2::password_hash::{PasswordHasher, SaltString};
 use argon2::Argon2;
 use byteorder::ReadBytesExt;
-use chacha20poly1305::{
-    aead::{AeadMut, NewAead},
-    ChaCha20Poly1305, Key, Nonce,
-};
+use chacha20poly1305::KeyInit;
+use chacha20poly1305::{aead::AeadMut, ChaCha20Poly1305, Key, Nonce};
 use percent_encoding::percent_decode_str;
 use rand_core::{OsRng, RngCore};
 use secstr::SecUtf8;
@@ -68,7 +66,7 @@ impl Credential {
             // leading slash is not required for git
             path: url.path()[1..].to_string(),
             protocol: url.scheme().to_string(),
-            // decode percent encoding 
+            // decode percent encoding
             password: SecUtf8::from(
                 percent_decode_str(url.password().unwrap_or(""))
                     .decode_utf8()

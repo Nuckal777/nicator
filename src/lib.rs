@@ -41,13 +41,11 @@ struct ProgramOptions {
     store: PathBuf,
     socket: PathBuf,
     git_credentials: PathBuf,
+    passphrase: Option<SecUtf8>,
 }
 
 impl ProgramOptions {
-    fn from_matches(
-        global: &ArgMatches,
-        sub: Option<&ArgMatches>,
-    ) -> Result<ProgramOptions, Error> {
+    fn from_matches(global: &ArgMatches, sub: &ArgMatches) -> Result<ProgramOptions, Error> {
         let uid = nix::unistd::getuid();
         let user = nix::unistd::User::from_uid(uid)?.ok_or(Error::NoUser)?;
         Ok(ProgramOptions {
@@ -55,19 +53,18 @@ impl ProgramOptions {
             store: Self::get_store_path(global, &user),
             socket: Self::get_socket_path(global),
             timeout: sub
-                .map_or(Ok(DEFAULT_TIMEOUT), |m| {
-                    m.value_of("timeout")
-                        .map_or(Ok(DEFAULT_TIMEOUT), str::parse)
-                })
+                .try_get_one::<String>("timeout")
+                .ok()
+                .unwrap_or(None)
+                .map_or(Ok(DEFAULT_TIMEOUT), |s| str::parse(s.as_str()))
                 .map_err(|_| Error::Conversion)?,
+            passphrase: global.value_of("passphrase").map(SecUtf8::from),
         })
     }
 
-    fn get_git_cred_path(matches: Option<&ArgMatches>, user: &nix::unistd::User) -> PathBuf {
-        if let Some(matches) = matches {
-            if let Some(path) = matches.value_of("git") {
-                return PathBuf::from(path);
-            }
+    fn get_git_cred_path(matches: &ArgMatches, user: &nix::unistd::User) -> PathBuf {
+        if let Ok(Some(path)) = matches.try_get_one::<String>("git") {
+            return PathBuf::from(&path);
         }
         let mut git_cred_path = user.dir.clone();
         git_cred_path.push(".git-credentials");
@@ -91,6 +88,16 @@ impl ProgramOptions {
         let file_name = format!("/tmp/nicator-{}.sock", uid);
         PathBuf::from(file_name)
     }
+
+    fn passphrase(&self) -> std::io::Result<SecUtf8> {
+        match &self.passphrase {
+            Some(p) => Ok(p.clone()),
+            None => {
+                let passphrase = SecUtf8::from(rpassword::prompt_password("Enter passphrase: ")?);
+                Ok(passphrase)
+            }
+        }
+    }
 }
 
 #[must_use]
@@ -105,7 +112,7 @@ pub fn run() -> Exit {
             SubCommand::with_name("lock").about("Locks access to the nicator store by shutting down the server daemon."),
             SubCommand::with_name("unlock").about("Unlocks the nicator store. Starts a server daemon if required.").arg(
                 Arg::with_name("timeout")
-                    .short("t")
+                    .short('t')
                     .long("timeout")
                     .help("Timeout after which to lock the store. Defaults to 3600s.")
                     .value_name("SECONDS")
@@ -116,7 +123,7 @@ pub fn run() -> Exit {
             SubCommand::with_name("export").about("Prints out all stored credentials."),
             SubCommand::with_name("import").about("Imports a .git-credentials into the nicator store.").arg(
                 Arg::with_name("git")
-                    .short("g")
+                    .short('g')
                     .long("git")
                     .help("Path to .git-credentials. Defaults to ~/.git-credentials")
                     .value_name("PATH")
@@ -125,28 +132,38 @@ pub fn run() -> Exit {
         ])
         .args(&[
             Arg::with_name("socket")
-                .short("s")
+                .short('s')
                 .long("socket")
                 .help("Path used for the unix socket. Defaults to '/tmp/nicator-$UID.sock'. Non-default values screw up git integration.")
                 .value_name("PATH")
                 .takes_value(true),
             Arg::with_name("credentials")
-                .short("c")
+                .short('c')
                 .long("credentials")
                 .help("Path to the credential store. Defaults to '$HOME/.nicator-credentials'.")
                 .value_name("PATH")
                 .takes_value(true),
+            Arg::with_name("passphrase")
+                .short('p')
+                .long("passphrase")
+                .help("Passphrase. If not provided it will be prompted. Using this flag likely stores the passphrase in the shell history.")
+                .value_name("PASSPHRASE")
+                .takes_value(true),
         ])
         .get_matches();
 
-    let (name, sub_matches) = matches.subcommand();
-    let options = ProgramOptions::from_matches(&matches, sub_matches);
-    match options {
-        Ok(options) => perform_command(name, options),
-        Err(err) => {
-            eprintln!("Failed to determine arguments. {}", err);
-            Exit::Failure
+    if let Some((name, sub_matches)) = matches.subcommand() {
+        let options = ProgramOptions::from_matches(&matches, sub_matches);
+        match options {
+            Ok(options) => perform_command(name, options),
+            Err(err) => {
+                eprintln!("Failed to determine arguments. {}", err);
+                Exit::Failure
+            }
         }
+    } else {
+        eprintln!("No subcommand given. Try --help.");
+        Exit::Failure
     }
 }
 
@@ -187,7 +204,9 @@ fn perform_init(options: &ProgramOptions) -> Exit {
         );
         return Exit::Failure;
     }
-    let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
+    let passphrase = options
+        .passphrase()
+        .expect("Failed to read passphrase from stdin.");
     let store = store::Store::default();
     store
         .encrypt_at(&options.store, passphrase.unsecure())
@@ -217,7 +236,9 @@ fn perform_unlock(options: &ProgramOptions) -> Exit {
     let store_path = std::fs::canonicalize(&options.store);
     match store_path {
         Ok(store_path) => with_client(options, |client| {
-            let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
+            let passphrase = options
+                .passphrase()
+                .expect("Failed to read passphrase from stdin.");
             client
                 .unlock(passphrase, store_path, options.timeout)
                 .expect("Failed to unlock the nicator store.");
@@ -279,7 +300,9 @@ fn perform_erase(options: &ProgramOptions) -> Exit {
 }
 
 fn perform_export(options: &ProgramOptions) -> Exit {
-    let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
+    let passphrase = options
+        .passphrase()
+        .expect("Failed to read passphrase from stdin.");
     let store = store::Store::decrypt_from(&options.store, passphrase.unsecure());
     match store {
         Ok(store) => {
@@ -300,7 +323,9 @@ fn perform_export(options: &ProgramOptions) -> Exit {
 }
 
 fn perform_import(options: &ProgramOptions) -> Exit {
-    let passphrase = prompt_passphrase().expect("Failed to read passphrase from stdin.");
+    let passphrase = options
+        .passphrase()
+        .expect("Failed to read passphrase from stdin.");
     let git_credentials = std::fs::read_to_string(&options.git_credentials).map(SecUtf8::from);
     if git_credentials.is_err() {
         eprintln!("Failed to open .git-credentials");
@@ -350,13 +375,4 @@ fn with_client<H: FnOnce(&mut Client)>(options: &ProgramOptions, handler: H) -> 
     }
     eprintln!("Failed to connect to the nicator server daemon. Cannot find socket file. You may need to `nicator unlock`.");
     Exit::Failure
-}
-
-fn prompt_passphrase() -> std::io::Result<SecUtf8> {
-    let passphrase = SecUtf8::from(rpassword::prompt_password_from_bufread(
-        &mut std::io::stdin().lock(),
-        &mut std::io::stdout().lock(),
-        "Enter passphrase: ",
-    )?);
-    Ok(passphrase)
 }
