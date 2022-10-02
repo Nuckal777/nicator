@@ -1,6 +1,6 @@
 [package]
 name = "nicator"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["Erik Schubert <nuckal777+nicator@gmail.com>"]
 description = "A lightweight encrypting git credential helper"
 readme = "README.md"
@@ -30,3 +30,10 @@ url = "2.3"
 
 [profile.release]
 strip="debuginfo"
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/nicator", dest = "/usr/bin/nicator", mode = "0755" },
+    { source = "LICENSE", dest = "/usr/share/doc/nicator/LICENSE", doc = true, mode = "0644" },
+    { source = "README.md", dest = "/usr/share/doc/nicator/README.md", doc = true, mode = "0644" }
+]

@@ -29,10 +29,12 @@ jobs:
       - run: cargo test --locked --all-features --release
       - run: cargo install cargo-deb
       - run: cargo deb
+      - run: cargo install cargo-generate-rpm
+      - run: cargo generate-rpm
       - run: mv target/release/nicator target/release/nicator_${TARGET_VERSION}
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "target/release/nicator_${{ github.event.inputs.version }},target/debian/*.deb"
+          artifacts: "target/release/nicator_${{ github.event.inputs.version }},target/debian/*.deb,target/generate-rpm/*.rpm"
           artifactErrorsFailBuild: true
           commit: ${{ github.sha }}
           bodyFile: release-notes/${{ github.event.inputs.version }}.md
