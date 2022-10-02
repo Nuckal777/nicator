@@ -34,11 +34,13 @@ impl Daemon {
         })
     }
 
-    fn main_loop(&mut self) -> Result<(), crate::Error> {
+    fn main_loop<P: AsRef<Path>>(&mut self, socket_path: P) -> Result<(), crate::Error> {
         let terminate = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(signal_hook::consts::SIGTERM, terminate.clone())?;
         let start_time = Instant::now();
         while !terminate.load(Ordering::Relaxed) {
+            let perm = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(socket_path.as_ref(), perm)?;
             if self.poll()? {
                 let exit = self.accept()?;
                 if exit {
@@ -260,9 +262,7 @@ pub fn launch<P: AsRef<Path>>(socket_path: P) -> Result<(), crate::Error> {
         return Ok(());
     }
     let mut daemon = Daemon::new(&socket_path)?;
-    let perm = std::fs::Permissions::from_mode(0o600);
-    std::fs::set_permissions(&socket_path, perm)?;
-    match daemon.main_loop() {
+    match daemon.main_loop(socket_path.as_ref()) {
         Ok(_) => println!("nicator server exiting"),
         Err(err) => eprintln!("nicator server had an error: {}", err),
     }
