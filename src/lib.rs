@@ -1,6 +1,6 @@
 use std::{io::Read, path::PathBuf};
 
-use clap::{crate_authors, crate_version, App, Arg, ArgMatches, SubCommand};
+use clap::{crate_authors, crate_version, Arg, ArgMatches, Command, ArgAction};
 use client::Client;
 use secstr::SecUtf8;
 use thiserror::Error;
@@ -58,7 +58,7 @@ impl ProgramOptions {
                 .unwrap_or(None)
                 .map_or(Ok(DEFAULT_TIMEOUT), |s| str::parse(s.as_str()))
                 .map_err(|_| Error::Conversion)?,
-            passphrase: global.value_of("passphrase").map(SecUtf8::from),
+            passphrase: global.get_one::<String>("passphrase").map(SecUtf8::from),
         })
     }
 
@@ -72,7 +72,7 @@ impl ProgramOptions {
     }
 
     fn get_store_path(matches: &ArgMatches, user: &nix::unistd::User) -> PathBuf {
-        if let Some(path) = matches.value_of("credentials") {
+        if let Some(path) = matches.get_one::<String>("credentials") {
             return PathBuf::from(path);
         }
         let mut store_path = user.dir.clone();
@@ -81,7 +81,7 @@ impl ProgramOptions {
     }
 
     fn get_socket_path(matches: &ArgMatches) -> PathBuf {
-        if let Some(path) = matches.value_of("socket") {
+        if let Some(path) = matches.get_one::<String>("socket") {
             return PathBuf::from(path);
         }
         let uid = nix::unistd::getuid();
@@ -102,53 +102,58 @@ impl ProgramOptions {
 
 #[must_use]
 pub fn run() -> Exit {
-    let matches = App::new("nicator")
+    let matches = Command::new("nicator")
         .version(crate_version!())
         .author(crate_authors!())
         .about("A lightweight encrypting git credential helper")
         .subcommands(vec![
-            SubCommand::with_name("server").about("Starts nicator server daemon. Nicator does this automatically while unlocking."),
-            SubCommand::with_name("init").about("Creates the .nicator-credentials file."),
-            SubCommand::with_name("lock").about("Locks access to the nicator store by shutting down the server daemon."),
-            SubCommand::with_name("unlock").about("Unlocks the nicator store. Starts a server daemon if required.").arg(
-                Arg::with_name("timeout")
+            Command::new("server").about("Starts nicator server daemon. Nicator does this automatically while unlocking."),
+            Command::new("init").about("Creates the .nicator-credentials file."),
+            Command::new("lock").about("Locks access to the nicator store by shutting down the server daemon."),
+            Command::new("unlock").about("Unlocks the nicator store. Starts a server daemon if required.").arg(
+                Arg::new("timeout")
                     .short('t')
                     .long("timeout")
                     .help("Timeout after which to lock the store. Defaults to 3600s.")
+                    .action(ArgAction::Set)
                     .value_name("SECONDS")
-                    .takes_value(true)),
-            SubCommand::with_name("get").about("Fetches a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
-            SubCommand::with_name("store").about("Stores a credential in the nicator store. Required information is read from stdin according to the git credentials format."),
-            SubCommand::with_name("erase").about("Deletes a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
-            SubCommand::with_name("export").about("Prints out all stored credentials."),
-            SubCommand::with_name("import").about("Imports a .git-credentials into the nicator store.").arg(
-                Arg::with_name("git")
+                    .num_args(1)),
+            Command::new("get").about("Fetches a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
+            Command::new("store").about("Stores a credential in the nicator store. Required information is read from stdin according to the git credentials format."),
+            Command::new("erase").about("Deletes a credential from the nicator store. Required information is read from stdin according to the git credentials format."),
+            Command::new("export").about("Prints out all stored credentials."),
+            Command::new("import").about("Imports a .git-credentials into the nicator store.").arg(
+                Arg::new("git")
                     .short('g')
                     .long("git")
                     .help("Path to .git-credentials. Defaults to ~/.git-credentials")
+                    .action(ArgAction::Set)
                     .value_name("PATH")
-                    .takes_value(true)
+                    .num_args(1)
             ),
         ])
         .args(&[
-            Arg::with_name("socket")
+            Arg::new("socket")
                 .short('s')
                 .long("socket")
                 .help("Path used for the unix socket. Defaults to '/tmp/nicator-$UID.sock'. Non-default values screw up git integration.")
+                .action(ArgAction::Set)
                 .value_name("PATH")
-                .takes_value(true),
-            Arg::with_name("credentials")
+                .num_args(1),
+            Arg::new("credentials")
                 .short('c')
                 .long("credentials")
                 .help("Path to the credential store. Defaults to '$HOME/.nicator-credentials'.")
+                .action(ArgAction::Set)
                 .value_name("PATH")
-                .takes_value(true),
-            Arg::with_name("passphrase")
+                .num_args(1),
+            Arg::new("passphrase")
                 .short('p')
                 .long("passphrase")
                 .help("Passphrase. If not provided it will be prompted. Using this flag likely stores the passphrase in the shell history.")
+                .action(ArgAction::Set)
                 .value_name("PASSPHRASE")
-                .takes_value(true),
+                .num_args(1),
         ])
         .get_matches();
 
