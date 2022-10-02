@@ -34,6 +34,26 @@ impl Daemon {
         })
     }
 
+    fn main_loop(&mut self) -> Result<(), crate::Error> {
+        let terminate = Arc::new(AtomicBool::new(false));
+        signal_hook::flag::register(signal_hook::consts::SIGTERM, terminate.clone())?;
+        let start_time = Instant::now();
+        while !terminate.load(Ordering::Relaxed) {
+            if self.poll()? {
+                let exit = self.accept()?;
+                if exit {
+                    break;
+                }
+            }
+            let current_time = Instant::now();
+            let duration = current_time - start_time;
+            if duration > self.timeout {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     fn poll(&mut self) -> Result<bool, crate::Error> {
         let poll_fd =
             nix::poll::PollFd::new(self.listener.as_raw_fd(), nix::poll::PollFlags::POLLIN);
@@ -239,24 +259,12 @@ pub fn launch<P: AsRef<Path>>(socket_path: P) -> Result<(), crate::Error> {
         println!("A nicator daemon is already running.");
         return Ok(());
     }
-    let terminate = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, terminate.clone())?;
     let mut daemon = Daemon::new(&socket_path)?;
     let perm = std::fs::Permissions::from_mode(0o600);
     std::fs::set_permissions(&socket_path, perm)?;
-    let start_time = Instant::now();
-    while !terminate.load(Ordering::Relaxed) {
-        if daemon.poll()? {
-            let exit = daemon.accept()?;
-            if exit {
-                break;
-            }
-        }
-        let current_time = Instant::now();
-        let duration = current_time - start_time;
-        if duration > daemon.timeout {
-            break;
-        }
+    match daemon.main_loop() {
+        Ok(_) => println!("nicator server exiting"),
+        Err(err) => eprintln!("nicator server had an error: {}", err),
     }
     std::fs::remove_file(socket_path)?;
     Ok(())
