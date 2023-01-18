@@ -1,6 +1,6 @@
 # Nicator
 
-![Build Status](https://img.shields.io/github/workflow/status/Nuckal777/nicator/test)
+![Build Status](https://img.shields.io/github/actions/workflow/status/Nuckal777/nicator/test.yaml?branch=master)
 [![Coverage Status](https://coveralls.io/repos/github/Nuckal777/nicator/badge.svg?branch=master)](https://coveralls.io/github/Nuckal777/nicator?branch=master)
 
 A lightweight encrypting git credential helper (for Linux)
@@ -37,6 +37,7 @@ Nicator encrypts credentials using 256-bit AES.
 The passphrase is hashed using Argon2id.
 
 ## Security considerations
+To put it bluntly after unlocking `nicator` is as insecure as `git-credential-store`.
 - You should trust the root user on your system.
 - When hibernating your nicator password may be written to the disk if a nicator server is still running
 - Malicious code may act like a valid the nicator client and read credentials from the unix socket after the credential store is unlocked
