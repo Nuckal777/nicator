@@ -1,6 +1,6 @@
 use std::{io::Read, path::PathBuf};
 
-use clap::{crate_authors, crate_version, Arg, ArgMatches, Command, ArgAction};
+use clap::{crate_authors, crate_version, Arg, ArgAction, ArgMatches, Command};
 use client::Client;
 use secstr::SecUtf8;
 use thiserror::Error;
@@ -85,7 +85,7 @@ impl ProgramOptions {
             return PathBuf::from(path);
         }
         let uid = nix::unistd::getuid();
-        let file_name = format!("/tmp/nicator-{}.sock", uid);
+        let file_name = format!("/tmp/nicator-{uid}.sock");
         PathBuf::from(file_name)
     }
 
@@ -162,7 +162,7 @@ pub fn run() -> Exit {
         match options {
             Ok(options) => perform_command(name, options),
             Err(err) => {
-                eprintln!("Failed to determine arguments. {}", err);
+                eprintln!("Failed to determine arguments. {err}");
                 Exit::Failure
             }
         }
@@ -250,8 +250,8 @@ fn perform_unlock(options: &ProgramOptions) -> Exit {
         }),
         Err(err) => {
             eprintln!(
-                "Failed to canonicalize store path {:?}: {}",
-                options.store, err
+                "Failed to canonicalize store path {:?}: {err}",
+                options.store
             );
             Exit::Failure
         }
@@ -320,7 +320,7 @@ fn perform_export(options: &ProgramOptions) -> Exit {
             }
         }
         Err(err) => {
-            eprintln!("Failed to export credentials: {}", err);
+            eprintln!("Failed to export credentials: {err}");
             return Exit::Failure;
         }
     }
@@ -361,13 +361,13 @@ fn perform_import(options: &ProgramOptions) -> Exit {
             match store.encrypt_at(&options.store, passphrase.unsecure()) {
                 Ok(_) => Exit::Success,
                 Err(err) => {
-                    eprintln!("Failed to store imported credentials. {}", err);
+                    eprintln!("Failed to store imported credentials. {err}");
                     Exit::Failure
                 }
             }
         }
         Err(err) => {
-            eprintln!("Failed to import credentials: {}", err);
+            eprintln!("Failed to import credentials: {err}");
             Exit::Failure
         }
     }

@@ -41,7 +41,7 @@ impl Client {
         let response = crate::packet::parse(&mut self.stream)?;
         if let Packet::Result { message, success } = response {
             if !success {
-                eprintln!("Unlocking failed. It is likely that a wrong passphrase was entered. Received from daemon: {}", message);
+                eprintln!("Unlocking failed. It is likely that a wrong passphrase was entered. Received from daemon: {message}");
             }
         } else {
             eprintln!("Received an unexpected return value from daemon.");
@@ -64,7 +64,7 @@ impl Client {
         let response = crate::packet::parse(&mut self.stream)?;
         if let Packet::Result { message, success } = response {
             if !success {
-                eprintln!("Storing the credential failed. You may need to `nicator unlock`. Received from daemon: {}", message);
+                eprintln!("Storing the credential failed. You may need to `nicator unlock`. Received from daemon: {message}");
             }
         } else {
             eprintln!("Received an unexpected return value from daemon.");

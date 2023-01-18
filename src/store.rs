@@ -60,7 +60,7 @@ impl Credential {
     /// If the url is not valid.
     pub fn from_url(url_str: &str) -> Result<Credential, url::ParseError> {
         let url = url::Url::parse(url_str)?;
-        let port = url.port().map_or(String::new(), |p| format!(":{}", p));
+        let port = url.port().map_or(String::new(), |p| format!(":{p}"));
         Ok(Credential {
             host: url.host_str().unwrap_or("").to_string() + &port,
             // leading slash is not required for git
@@ -255,7 +255,7 @@ mod tests {
                 super::Credential {
                     host: "host2".to_string(),
                     password: SecUtf8::from("pw2"),
-                    path: "".to_string(),
+                    path: String::new(),
                     protocol: "protocol2".to_string(),
                     username: "user2".to_string(),
                 },

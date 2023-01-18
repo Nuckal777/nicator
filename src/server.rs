@@ -106,14 +106,14 @@ impl Daemon {
                 self.passphrase = Some(passphrase);
                 self.timeout = Duration::from_secs(timeout);
                 let response = Packet::Result {
-                    message: "".to_string(),
+                    message: String::new(),
                     success: true,
                 };
                 crate::packet::write(conn, &response)?;
             }
             Err(err) => {
                 let response = Packet::Result {
-                    message: format!("{}", err),
+                    message: format!("{err}"),
                     success: false,
                 };
                 crate::packet::write(conn, &response)?;
@@ -136,14 +136,14 @@ impl Daemon {
             match result {
                 Ok(_) => {
                     let response = Packet::Result {
-                        message: "".to_string(),
+                        message: String::new(),
                         success: true,
                     };
                     crate::packet::write(conn, &response)?;
                 }
                 Err(err) => {
                     let response = Packet::Result {
-                        message: format!("{}", err),
+                        message: format!("{err}"),
                         success: false,
                     };
                     crate::packet::write(conn, &response)?;
@@ -190,7 +190,7 @@ impl Daemon {
                 }
                 Err(err) => {
                     let response = Packet::Result {
-                        message: format!("{}", err),
+                        message: format!("{err}"),
                         success: false,
                     };
                     crate::packet::write(conn, &response)?;
@@ -225,14 +225,14 @@ impl Daemon {
             match result {
                 Ok(_) => {
                     let response = Packet::Result {
-                        message: "".to_string(),
+                        message: String::new(),
                         success: true,
                     };
                     crate::packet::write(conn, &response)?;
                 }
                 Err(err) => {
                     let response = Packet::Result {
-                        message: format!("{}", err),
+                        message: format!("{err}"),
                         success: false,
                     };
                     crate::packet::write(conn, &response)?;
@@ -264,7 +264,7 @@ pub fn launch<P: AsRef<Path>>(socket_path: P) -> Result<(), crate::Error> {
     let mut daemon = Daemon::new(&socket_path)?;
     match daemon.main_loop(socket_path.as_ref()) {
         Ok(_) => println!("nicator server exiting"),
-        Err(err) => eprintln!("nicator server had an error: {}", err),
+        Err(err) => eprintln!("nicator server had an error: {err}"),
     }
     std::fs::remove_file(socket_path)?;
     Ok(())
