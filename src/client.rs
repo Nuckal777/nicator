@@ -82,8 +82,7 @@ impl Client {
             Packet::Get { credential } => return Ok(Some(credential)),
             Packet::Result { message, .. } => {
                 eprintln!(
-                    "Failed to fetch credential from the nicator store. You may need to `nicator unlock`. Received from daemon: {}",
-                    message
+                    "Failed to fetch credential from the nicator store. You may need to `nicator unlock`. Received from daemon: {message}"
                 );
             }
             _ => {}
@@ -100,8 +99,7 @@ impl Client {
         if let Packet::Result { message, success } = response {
             if !success {
                 eprintln!(
-                    "Erase failed. You may need to `nicator unlock`. Received from daemon: {}",
-                    message
+                    "Erase failed. You may need to `nicator unlock`. Received from daemon: {message}",
                 );
             }
         } else {

@@ -1,4 +1,4 @@
-use argon2::password_hash::{PasswordHasher, SaltString};
+use argon2::password_hash::{PasswordHasher, Salt, SaltString};
 use argon2::Argon2;
 use byteorder::ReadBytesExt;
 use chacha20poly1305::KeyInit;
@@ -108,7 +108,8 @@ impl Store {
         let password_hash = argon2
             .hash_password(
                 passphrase.as_bytes(),
-                std::str::from_utf8(&salt_data).map_err(|_| crate::Error::Crypto)?,
+                Salt::from_b64(std::str::from_utf8(&salt_data).map_err(|_| crate::Error::Crypto)?)
+                    .map_err(|_| crate::Error::Crypto)?,
             )
             .map_err(|_| crate::Error::Crypto)?
             .hash
@@ -147,7 +148,7 @@ impl Store {
         // Argon2 with default params (Argon2id v19)
         let argon2 = Argon2::default();
         let password_hash = argon2
-            .hash_password(passphrase.as_bytes(), salt.as_ref())
+            .hash_password(passphrase.as_bytes(), &salt)
             .map_err(|_| crate::Error::Crypto)?
             .hash
             .ok_or(crate::Error::Crypto)?;
@@ -164,7 +165,7 @@ impl Store {
             .map_err(|_| crate::Error::Crypto)?;
 
         writer.write_all(&[FILE_VERSION])?;
-        writer.write_all(salt.as_bytes())?;
+        writer.write_all(salt.as_str().as_bytes())?;
         writer.write_all(nonce.as_slice())?;
         writer.write_all(&encrypted)?;
         Ok(())
