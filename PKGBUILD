@@ -1,6 +1,6 @@
 # Maintainer: Erik "Nuckal777" Schubert <nuckal777+nicator@gmail.com>
 pkgname=nicator
-pkgver=0.3.1
+pkgver=0.3.2
 pkgrel=1
 pkgdesc="A lightweight encrypting git credential helper"
 arch=('x86_64')
@@ -9,7 +9,7 @@ license=('Unlicense')
 depends=('gcc-libs')
 makedepends=('cargo' 'git')
 optdepends=('git: the VCS nicator is made for')
-source=("$pkgname"::"git+https://github.com/Nuckal777/nicator#tag=v0.3.1")
+source=("$pkgname"::"git+https://github.com/Nuckal777/nicator#tag=v0.3.2")
 noextract=()
 md5sums=('SKIP')
 
