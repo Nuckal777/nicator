@@ -7,7 +7,7 @@ use percent_encoding::percent_decode_str;
 use rand_core::{OsRng, RngCore};
 use secstr::SecUtf8;
 use serde_derive::{Deserialize, Serialize};
-use std::{os::unix::fs::OpenOptionsExt, slice::Iter};
+use std::os::unix::fs::OpenOptionsExt;
 
 const SALT_LEN: usize = 22;
 const NONCE_LEN: usize = 12;
@@ -58,6 +58,8 @@ impl Credential {
     /// Creates a credential from the given url.
     /// # Errors
     /// If the url is not valid.
+    /// # Panics
+    /// When percent encoding fails.
     pub fn from_url(url_str: &str) -> Result<Credential, url::ParseError> {
         let url = url::Url::parse(url_str)?;
         let port = url.port().map_or(String::new(), |p| format!(":{p}"));
@@ -230,10 +232,14 @@ impl Store {
         self.credentials
             .retain(|cred| !(cred.protocol == protocol && cred.host == host && cred.path == path));
     }
+}
 
-    /// Returns an iterator over all stored credentials.
-    pub fn iter(&self) -> Iter<Credential> {
-        self.credentials.iter()
+impl IntoIterator for Store {
+    type Item = Credential;
+    type IntoIter = std::vec::IntoIter<Credential>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.credentials.into_iter()
     }
 }
 
@@ -350,7 +356,7 @@ mod tests {
     #[test]
     fn iter() {
         let store = setup_store();
-        let iter = store.iter();
+        let iter = store.into_iter();
         assert_eq!(iter.count(), 2);
     }
 }

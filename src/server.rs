@@ -1,4 +1,4 @@
-use std::os::unix::io::AsRawFd;
+use std::os::fd::AsFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use std::{net::Shutdown, path::Path};
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
-const POLL_TIMEOUT: i32 = 200;
+const POLL_TIMEOUT: u16 = 200;
 
 use secstr::SecUtf8;
 
@@ -58,7 +58,7 @@ impl Daemon {
 
     fn poll(&mut self) -> Result<bool, crate::Error> {
         let poll_fd =
-            nix::poll::PollFd::new(self.listener.as_raw_fd(), nix::poll::PollFlags::POLLIN);
+            nix::poll::PollFd::new(self.listener.as_fd(), nix::poll::PollFlags::POLLIN);
         let poll_count = nix::poll::poll(&mut [poll_fd], POLL_TIMEOUT)?;
         Ok(poll_count == 1)
     }
@@ -134,7 +134,7 @@ impl Daemon {
                 &self.store_path,
             );
             match result {
-                Ok(_) => {
+                Ok(()) => {
                     let response = Packet::Result {
                         message: String::new(),
                         success: true,
@@ -223,7 +223,7 @@ impl Daemon {
                 &self.store_path,
             );
             match result {
-                Ok(_) => {
+                Ok(()) => {
                     let response = Packet::Result {
                         message: String::new(),
                         success: true,
@@ -263,7 +263,7 @@ pub fn launch<P: AsRef<Path>>(socket_path: P) -> Result<(), crate::Error> {
     }
     let mut daemon = Daemon::new(&socket_path)?;
     match daemon.main_loop(socket_path.as_ref()) {
-        Ok(_) => println!("nicator server exiting"),
+        Ok(()) => println!("nicator server exiting"),
         Err(err) => eprintln!("nicator server had an error: {err}"),
     }
     std::fs::remove_file(socket_path)?;

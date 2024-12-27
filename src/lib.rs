@@ -2,6 +2,7 @@ use std::{io::Read, path::PathBuf};
 
 use clap::{crate_authors, crate_version, Arg, ArgAction, ArgMatches, Command};
 use client::Client;
+use nix::unistd::{fork, ForkResult};
 use secstr::SecUtf8;
 use thiserror::Error;
 
@@ -90,12 +91,11 @@ impl ProgramOptions {
     }
 
     fn passphrase(&self) -> std::io::Result<SecUtf8> {
-        match &self.passphrase {
-            Some(p) => Ok(p.clone()),
-            None => {
-                let passphrase = SecUtf8::from(rpassword::prompt_password("Enter passphrase: ")?);
-                Ok(passphrase)
-            }
+        if let Some(p) = &self.passphrase {
+            Ok(p.clone())
+        } else {
+            let passphrase = SecUtf8::from(rpassword::prompt_password("Enter passphrase: ")?);
+            Ok(passphrase)
         }
     }
 }
@@ -160,7 +160,7 @@ pub fn run() -> Exit {
     if let Some((name, sub_matches)) = matches.subcommand() {
         let options = ProgramOptions::from_matches(&matches, sub_matches);
         match options {
-            Ok(options) => perform_command(name, options),
+            Ok(options) => perform_command(name, &options),
             Err(err) => {
                 eprintln!("Failed to determine arguments. {err}");
                 Exit::Failure
@@ -172,29 +172,29 @@ pub fn run() -> Exit {
     }
 }
 
-fn perform_command(command: &str, options: ProgramOptions) -> Exit {
+fn perform_command(command: &str, options: &ProgramOptions) -> Exit {
     match command {
         "server" => return perform_server(options),
-        "init" => return perform_init(&options),
-        "lock" => return perform_lock(&options),
-        "unlock" => return perform_unlock(&options),
-        "store" => return perform_store(&options),
-        "get" => return perform_get(&options),
-        "erase" => return perform_erase(&options),
-        "export" => return perform_export(&options),
-        "import" => return perform_import(&options),
+        "init" => return perform_init(options),
+        "lock" => return perform_lock(options),
+        "unlock" => return perform_unlock(options),
+        "store" => return perform_store(options),
+        "get" => return perform_get(options),
+        "erase" => return perform_erase(options),
+        "export" => return perform_export(options),
+        "import" => return perform_import(options),
         _ => eprintln!("Unknown operation."),
     };
     Exit::Failure
 }
 
-fn perform_server(options: ProgramOptions) -> Exit {
+fn perform_server(options: &ProgramOptions) -> Exit {
     let abs_socket = if options.socket.is_absolute() {
-        options.socket
+        &options.socket
     } else {
-        std::env::current_dir()
+        &std::env::current_dir()
             .expect("Failed to fetch working directory.")
-            .join(options.socket)
+            .join(&options.socket)
     };
     nix::unistd::daemon(false, false).expect("Failed to daemonize nicator.");
     server::launch(abs_socket).expect("Failed to launch the nicator server daemon.");
@@ -227,16 +227,18 @@ fn perform_lock(options: &ProgramOptions) -> Exit {
 
 fn perform_unlock(options: &ProgramOptions) -> Exit {
     if !options.socket.exists() {
-        let nicator_path =
-            std::env::current_exe().expect("Failed to fetch path for nicator binary.");
-        std::process::Command::new(nicator_path)
-            .arg("-s")
-            .arg(&options.socket)
-            .arg("server")
-            .spawn()
-            .expect("Failed to create nicator damon spawn process.");
+        match unsafe { fork() } {
+            Ok(ForkResult::Parent { child: _ }) => {}
+            Ok(ForkResult::Child) => {
+                std::process::exit(perform_server(options) as i32);
+            }
+            Err(err) => {
+                eprintln!("failed to fork: {err}");
+                return Exit::Failure;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    std::thread::sleep(std::time::Duration::from_millis(50));
 
     let store_path = std::fs::canonicalize(&options.store);
     match store_path {
@@ -311,7 +313,7 @@ fn perform_export(options: &ProgramOptions) -> Exit {
     let store = store::Store::decrypt_from(&options.store, passphrase.unsecure());
     match store {
         Ok(store) => {
-            for cred in store.iter() {
+            for cred in store {
                 println!("protocol={}", cred.protocol);
                 println!("host={}", cred.host);
                 println!("path={}", cred.path);
@@ -359,7 +361,7 @@ fn perform_import(options: &ProgramOptions) -> Exit {
                 store.update(cred);
             }
             match store.encrypt_at(&options.store, passphrase.unsecure()) {
-                Ok(_) => Exit::Success,
+                Ok(()) => Exit::Success,
                 Err(err) => {
                     eprintln!("Failed to store imported credentials. {err}");
                     Exit::Failure
